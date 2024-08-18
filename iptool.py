@@ -2,7 +2,7 @@
 # coding=utf-8
 # author: Cof-Lee
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-07-19
+# update: 2024-08-18
 
 import tkinter
 from tkinter import messagebox
@@ -18,16 +18,16 @@ class MainWindow:
         self.resizable = True  # True 表示宽度和高度可由用户手动调整
         self.minsize = (480, 320)
         self.maxsize = (1920, 1080)
-        self.background = "#3A3A3A"  # 设置背景色，RGB
+        self.background = "#3A3A3A"  # 主窗口背景色，RGB
         self.window_obj = None  # 在 MainWindow.show()里创建
         self.menu_bar = None  # 在 MainWindow.create_menu_bar_init()里创建
         self.screen_width = 0  # 在 MainWindow.show()里赋值
         self.screen_height = 0  # 在 MainWindow.show()里赋值
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v1.0 pre",
+                                "版本:  v240818",
                                 "本软件使用GPL-v3.0协议开源",
-                                "作者:  李茂福",
-                                "更新时间: 2024-07-19"]
+                                "作者:  李茂福（Cof-Lee）",
+                                "更新时间: 2024-08-18"]
         self.padx = 2
         self.pady = 2
         self.view_width = 20
@@ -35,6 +35,9 @@ class MainWindow:
         self.font_family = ""
         self.font_size = 18
         self.widget_dict = {}
+        self.current_netseg = ""
+        self.current_maskint = 32
+        self.is_calculated = False
 
     def show(self):
         self.window_obj = tkinter.Tk()  # ★★★创建主窗口对象★★★
@@ -53,7 +56,7 @@ class MainWindow:
         self.window_obj.configure(bg=self.background)  # 设置主窗口背景色，RGB
         # 加载初始化界面控件
         self.load_main_window_init_widget()  # ★★★ 接下来，所有的事情都在此界面操作 ★★★
-        # 子窗口点击右上角的关闭按钮后，触发此函数
+        # 主窗口点击右上角的关闭按钮后，触发此函数
         self.window_obj.protocol("WM_DELETE_WINDOW", self.on_closing_main_window)
         # 运行窗口主循环
         self.window_obj.mainloop()
@@ -73,6 +76,7 @@ class MainWindow:
     def create_main_widgets(self):
         self.text_font = font.Font(size=self.font_size, family=self.font_family)
         # 添加控件
+        # 输入ip信息
         label_input_ip = tkinter.Label(self.window_obj, text="输入ip信息★:")  # ip信息为【必填】
         label_input_ip.grid(row=0, column=0, padx=self.padx, pady=self.pady)
         self.widget_dict["sv_input_ip"] = tkinter.StringVar()
@@ -80,6 +84,7 @@ class MainWindow:
         entry_input_ip.grid(row=0, column=1, columnspan=2, padx=self.padx, pady=self.pady)
         entry_input_ip.focus_force()
         entry_input_ip.bind("<KeyPress>", self.front_end_input_func_printable_char)  # 监听键盘输入的字符
+        # 掩码位数
         label_netmask_int = tkinter.Label(self.window_obj, text="掩码位数:")  # 掩码位数为【选填】，在点击“计算”按钮后，会自动调到匹配值
         label_netmask_int.grid(row=1, column=0, padx=self.padx, pady=self.pady)
         self.widget_dict["sv_netmask_int"] = tkinter.StringVar()
@@ -91,25 +96,34 @@ class MainWindow:
                                                           showvalue=False, length=200, sliderlength=50)
         self.widget_dict["netmask_scale"].configure(command=self.set_sv_netmask_int)
         self.widget_dict["netmask_scale"].grid(row=1, column=2, padx=self.padx, pady=self.pady)
-        button_calculate = tkinter.Button(self.window_obj, text="计算", command=self.calculate)
-        button_calculate.grid(row=2, column=1, padx=self.padx, pady=self.pady)
-        button_clear = tkinter.Button(self.window_obj, text="清空", command=self.clear)
-        button_clear.grid(row=2, column=2, padx=self.padx, pady=self.pady)
-        self.widget_dict["text_ip_base_info"] = tkinter.Text(self.window_obj, width=56, height=7,
+        # 计算按钮组
+        calc_btn_frame = tkinter.Frame(self.window_obj, width=self.width - 25, height=30, bg=self.background)
+        calc_btn_frame.grid(row=2, column=0, columnspan=3)
+        button_calculate = tkinter.Button(calc_btn_frame, text="计算", command=self.calculate)
+        button_calculate.pack(side=tkinter.LEFT, padx=self.padx)
+        button_last_netseg = tkinter.Button(calc_btn_frame, text="↑上一子网", command=self.calculate_last_netseg)
+        button_last_netseg.pack(side=tkinter.LEFT, padx=self.padx)
+        button_next_netseg = tkinter.Button(calc_btn_frame, text="↓下一子网", command=self.calculate_next_netseg)
+        button_next_netseg.pack(side=tkinter.LEFT, padx=self.padx)
+        button_clear = tkinter.Button(calc_btn_frame, text="清空", command=self.clear)
+        button_clear.pack(side=tkinter.LEFT, padx=self.padx)
+        button_exit = tkinter.Button(calc_btn_frame, text="退出", command=self.on_closing_main_window)
+        button_exit.pack(side=tkinter.LEFT, padx=self.padx)
+        # ip基础信息显示文本框
+        self.widget_dict["text_ip_base_info"] = tkinter.Text(self.window_obj, width=60, height=7,
                                                              font=self.text_font, bg="black", fg="white")
         self.widget_dict["text_ip_base_info"].grid(row=3, column=0, columnspan=3, padx=self.padx, pady=self.pady)
+        # ip同网段信息显示文本框
         label_other_hostseg = tkinter.Label(self.window_obj, text="本网段其他主机ip:")
         label_other_hostseg.grid(row=4, column=0, padx=self.padx, pady=self.pady)
-        button_exit = tkinter.Button(self.window_obj, text="退出", command=self.on_closing_main_window)
-        button_exit.grid(row=4, column=1, padx=self.padx, pady=self.pady)
         self.widget_dict["scrollbar_other_hostseg"] = tkinter.Scrollbar(self.window_obj)
-        self.widget_dict["text_other_hostseg"] = tkinter.Text(self.window_obj, width=56, height=9,
+        self.widget_dict["text_other_hostseg"] = tkinter.Text(self.window_obj, width=60, height=9,
                                                               font=self.text_font, bg="black", fg="white",
                                                               yscrollcommand=self.widget_dict["scrollbar_other_hostseg"].set)
         self.widget_dict["text_other_hostseg"].grid(row=5, column=0, columnspan=3, padx=self.padx, pady=self.pady)
         self.widget_dict["scrollbar_other_hostseg"].config(command=self.widget_dict["text_other_hostseg"].yview)
         self.widget_dict["scrollbar_other_hostseg"].grid(row=5, column=3, padx=self.padx, pady=self.pady, sticky="NS")
-        # 设置Text的前景色tag_config
+        # 设置Text文本框的前景色tag_config
         self.widget_dict["text_ip_base_info"].tag_config("ip_address_fg", foreground="#deef5a")
         self.widget_dict["text_ip_base_info"].tag_config("maskint_fg", foreground="green")
         self.widget_dict["text_ip_base_info"].tag_config("maskbyte_fg", foreground="#0d64c0")
@@ -152,6 +166,9 @@ class MainWindow:
         self.widget_dict["netmask_scale"].set(0)
         self.widget_dict["text_ip_base_info"].delete("1.0", tkinter.END)
         self.widget_dict["text_other_hostseg"].delete("1.0", tkinter.END)
+        self.current_netseg = ""
+        self.current_maskint = 32
+        self.is_calculated = False
 
     def calculate(self, maskint=None):
         # maskint如果要赋值，需要赋str类型的值
@@ -174,8 +191,8 @@ class MainWindow:
             self.calculate_cidr(input_ip_str)
             return
         try:
-            ip_addr = cofnet.int32_to_ip(int(input_ip_str, base=16))
-            if cofnet.is_ip_addr(ip_addr):  # 输入信息为 纯ip，例如 "10.99.1.3"
+            ip_addr = cofnet.int32_to_ip(int(input_ip_str, base=16))  # 输入信息为十六进制数的ip地址
+            if cofnet.is_ip_addr(ip_addr):  # 输入信息转为纯ip，例如 "10.99.1.3"
                 self.calculate_ip(ip_addr, maskint=maskint)
                 return
         except ValueError:
@@ -191,12 +208,16 @@ class MainWindow:
         if maskint is None:
             new_maskint = "32"
         else:
-            new_maskint = maskint
+            if int(maskint) < 0 or int(maskint) > 32:
+                messagebox.showinfo("Error", "子网掩码应该在[0-32]区间内")
+                return
+            else:
+                new_maskint = maskint
         self.widget_dict["text_ip_base_info"].delete("1.0", tkinter.END)
         ip_hex_address = cofnet.ip_to_hex_string(input_ip_str)
-        ip_address = f"ip地址: {input_ip_str}    十六进制表示: {ip_hex_address}\n"
+        ip_address = f"ip地址: {input_ip_str}    ip地址十六进制表示: {ip_hex_address}\n"
         ip_int = cofnet.ip_mask_to_int(input_ip_str)
-        ip_int_show = f"ip地址转为整数值: {ip_int}\n"
+        ip_int_show = f"ip地址转为整数值: {ip_int}（十进制）\n"
         ip_binary_str = cofnet.ip_mask_to_binary_space(input_ip_str)
         ip_binary_show = f"ip地址二进制表示: {ip_binary_str}\n"
         maskbyte = cofnet.maskint_to_maskbyte(int(new_maskint))
@@ -266,6 +287,12 @@ class MainWindow:
                 start_index = str(i + 2) + "." + str(len(str(i + 2)))
                 end_index = str(i + 2) + "." + str(len(str(i + 2)) + 1 + len(ip_address))
                 self.widget_dict["text_other_hostseg"].tag_add("ip_address_fg", start_index, end_index)
+        # 记录当前网段及子网掩码位数
+        self.current_netseg = ip_netseg
+        self.current_maskint = new_maskint
+        self.is_calculated = True
+        self.widget_dict["sv_input_ip"].set("")
+        self.widget_dict["sv_input_ip"].set(input_ip_str + "/" + str(new_maskint))
 
     def calculate_ip_maskint(self, input_ip_maskint_str, maskint=None):
         # 输入信息为 ip/掩码位数，例如 "10.99.1.3/24"
@@ -278,6 +305,28 @@ class MainWindow:
         else:
             new_maskint = maskint
         self.calculate_ip(input_ip_str, new_maskint)
+
+    def calculate_last_netseg(self):
+        # 计算上一子网信息
+        if not self.is_calculated:
+            return
+        else:
+            self.widget_dict["text_ip_base_info"].delete("1.0", tkinter.END)
+            current_netseg_int = cofnet.ip_mask_to_int(self.current_netseg)
+            shift_bit = 32 - int(self.current_maskint)
+            last_netseg = cofnet.int32_to_ip(((current_netseg_int >> shift_bit) - 1) << shift_bit)
+            self.calculate_ip(last_netseg, self.current_maskint)
+
+    def calculate_next_netseg(self):
+        # 计算下一子网信息
+        if not self.is_calculated:
+            return
+        else:
+            self.widget_dict["text_ip_base_info"].delete("1.0", tkinter.END)
+            current_netseg_int = cofnet.ip_mask_to_int(self.current_netseg)
+            shift_bit = 32 - int(self.current_maskint)
+            next_netseg = cofnet.int32_to_ip(((current_netseg_int >> shift_bit) + 1) << shift_bit)
+            self.calculate_ip(next_netseg, self.current_maskint)
 
     def calculate_ip_range(self, input_ip_str):
         # 输入信息为 ip-range，例如 "10.99.1.33-55"
@@ -305,13 +354,14 @@ class MainWindow:
         :return:
         """
         self.menu_bar = tkinter.Menu(self.window_obj)  # 创建一个菜单，做菜单栏
-        # 创建一个菜单，做1级子菜单，不分窗，表示此菜单不可拉出来变成一个可移动的独立弹窗
+        # 创建一个菜单，做1级子菜单，不分窗（表示此菜单不可拉出来变成一个可移动的独立弹窗）
         menu_help = tkinter.Menu(self.menu_bar, tearoff=0, activebackground="green", activeforeground="white",
-                                 background="white", foreground="black")  # 创建一个菜单，做1级子菜单
+                                 background="white", foreground="black")
         # 菜单栏添加1级子菜单
         self.menu_bar.add_cascade(label="Help", menu=menu_help)
         # 1级子菜单添加2级子菜单（功能按钮）
         menu_help.add_command(label="About", command=self.click_menu_about_of_menu_bar_init)
+        # 主窗口添加菜单栏
         self.window_obj.config(menu=self.menu_bar)
 
     def click_menu_about_of_menu_bar_init(self):
@@ -323,7 +373,7 @@ class MainWindow:
             widget.destroy()
 
     def on_closing_main_window(self):
-        print("MainWindow: 退出了主程序")
+        print("MainWindow.on_closing_main_window: 退出了主程序")
         # self.window_obj.destroy()
         self.window_obj.quit()
 
