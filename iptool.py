@@ -2,7 +2,7 @@
 # coding=utf-8
 # author: Cof-Lee
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-08-24
+# update: 2024-08-25
 
 import tkinter
 from tkinter import messagebox
@@ -36,10 +36,10 @@ class MainWindow:
         self.screen_width = 0  # 在 MainWindow.show()里赋值
         self.screen_height = 0  # 在 MainWindow.show()里赋值
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v240824",
+                                "版本:  v240825",
                                 "本软件使用GPL-v3.0协议开源",
                                 "作者:  李茂福（Cof-Lee）",
-                                "更新时间: 2024-08-24"]
+                                "更新时间: 2024-08-25"]
         self.padx = 2
         self.pady = 2
         self.view_width = 20
@@ -110,9 +110,9 @@ class MainWindow:
                                           command=self.frame_main_func_ipv6_page_display)
         menu_button_ipv6.pack(side=tkinter.LEFT, padx=self.padx)
         # ping-界面按钮
-        menu_button_ping = tkinter.Button(self.frame_nav, text="Ping检测", width=self.frame_nav_button_width, height=1, bg="white",
-                                          command=self.frame_main_func_ping_page_display)
-        menu_button_ping.pack(side=tkinter.LEFT, padx=self.padx)
+        # menu_button_ping = tkinter.Button(self.frame_nav, text="Ping检测", width=self.frame_nav_button_width, height=1, bg="white",
+        #                                   command=self.frame_main_func_ping_page_display)
+        # menu_button_ping.pack(side=tkinter.LEFT, padx=self.padx)
 
     def create_frame_main_func(self):
         # 创建功能界面主frame
@@ -269,21 +269,21 @@ class MainWindow:
         calc_btn_frame.grid(row=2, column=0, columnspan=3)
         button_calculate = tkinter.Button(calc_btn_frame, text="计算", command=self.calculate6)
         button_calculate.pack(side=tkinter.LEFT, padx=self.padx)
-        button_last_netseg = tkinter.Button(calc_btn_frame, text="↑上一地址块", command=self.calculate_last_cidrv6)
-        button_last_netseg.pack(side=tkinter.LEFT, padx=self.padx)
-        button_next_netseg = tkinter.Button(calc_btn_frame, text="↓下一地址块", command=self.calculate_next_cidrv6)
-        button_next_netseg.pack(side=tkinter.LEFT, padx=self.padx)
+        # button_last_netseg = tkinter.Button(calc_btn_frame, text="↑上一地址块", command=self.calculate_last_cidrv6)
+        # button_last_netseg.pack(side=tkinter.LEFT, padx=self.padx)
+        # button_next_netseg = tkinter.Button(calc_btn_frame, text="↓下一地址块", command=self.calculate_next_cidrv6)
+        # button_next_netseg.pack(side=tkinter.LEFT, padx=self.padx)
         button_clear = tkinter.Button(calc_btn_frame, text="清空", command=self.clear6)
         button_clear.pack(side=tkinter.LEFT, padx=self.padx)
         button_exit = tkinter.Button(calc_btn_frame, text="退出", command=self.on_closing_main_window)
         button_exit.pack(side=tkinter.LEFT, padx=self.padx)
         # ip基础信息显示文本框
-        self.widget_dict_ipv6["text_ipv6_base_info"] = tkinter.Text(self.frame_main_func_ipv6_page, width=60, height=12,
+        self.widget_dict_ipv6["text_ipv6_base_info"] = tkinter.Text(self.frame_main_func_ipv6_page, width=64, height=12,
                                                                     font=self.text_font, bg="black", fg="white")
         self.widget_dict_ipv6["text_ipv6_base_info"].grid(row=3, column=0, columnspan=3, padx=self.padx, pady=self.pady)
         # 设置Text文本框的前景色tag_config
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("ipv6_address_fg", foreground="#deef5a")
-        self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("maskint_fg", foreground="green")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("ipv6_prefix_fg", foreground="green")
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("maskbyte_fg", foreground="#0d64c0")
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("hostseg_fg", foreground="pink")
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("hostseg_num_fg", foreground="red")
@@ -364,7 +364,7 @@ class MainWindow:
         if cofnet.is_ip_addr(input_ip_str):  # 输入信息为 纯ip，例如 "10.99.1.3"
             self.calculate_ip(input_ip_str, maskint=maskint)
             return
-        if cofnet.is_ip_maskint_addr(input_ip_str):  # 输入信息为 ip/掩码位数，例如 "10.99.1.3/24"
+        if cofnet.is_ip_with_maskint(input_ip_str):  # 输入信息为 ip/掩码位数，例如 "10.99.1.3/24"
             self.calculate_ip_maskint(input_ip_str, maskint=maskint)
             return
         if cofnet.is_ip_range(input_ip_str):  # 输入信息为 ip-range，例如 "10.99.1.33-55"
@@ -393,8 +393,8 @@ class MainWindow:
         if cofnet.is_ipv6_addr(input_ipv6_str):  # 输入信息为 ipv6地址，例如 "FD00:1234::11"
             self.calculate6_ipv6(input_ipv6_str, ipv6_prefix_len=maskint)
             return
-        if cofnet.is_cidrv6(input_ipv6_str):  # 输入信息为 cidrv6，例如 "FD00::11/64"
-            self.calculate6_cidrv6(input_ipv6_str, ipv6_prefix_len=maskint)
+        if cofnet.is_ipv6_with_prefix_len(input_ipv6_str):  # 输入信息为 cidrv6，例如 "FD00::11/64"
+            self.calculate6_ipv6_with_prefix_len(input_ipv6_str, ipv6_prefix_len=maskint)
             return
         print(f"您输入的ipv6地址信息格式不正确 {input_ipv6_str}")
 
@@ -462,8 +462,8 @@ class MainWindow:
         self.widget_dict_ipv4["netmask_scale"].set(int(new_maskint))
         # 输出同一网段下的所有主机ip
         self.widget_dict_ipv4["text_other_hostseg"].delete("1.0", tkinter.END)
-        if host_seg_num > 65536:  # 小于16位掩码时不再显示同网段所有ip
-            self.widget_dict_ipv4["text_other_hostseg"].insert(tkinter.END, "抱歉，ip数量太多了，这里基于性能考量，不再显示本网段所有ip地址")
+        if host_seg_num > 32768:  # 小于17位掩码时不再显示同网段所有ip
+            self.widget_dict_ipv4["text_other_hostseg"].insert(tkinter.END, "小于17位掩码时不再显示同网段所有ip")
         else:
             head = "序号\tip地址\t备注\n"
             self.widget_dict_ipv4["text_other_hostseg"].insert(tkinter.END, head)
@@ -561,6 +561,28 @@ class MainWindow:
         maskint = 32
         maskbyte = "255.255.255.255"
 
+    def ipv6_2seg_to_map_binary_str(self, two_seg_str: str, binary_str_offset: int) -> str:
+        two_seg_map_list = []
+        for i in range(binary_str_offset):
+            two_seg_map_list.append(" ")
+        two_seg_map_list.append(two_seg_str[0])
+        two_seg_map_list.append("   ")
+        two_seg_map_list.append(two_seg_str[1])
+        two_seg_map_list.append("    ")
+        two_seg_map_list.append(two_seg_str[2])
+        two_seg_map_list.append("   ")
+        two_seg_map_list.append(two_seg_str[3])
+        two_seg_map_list.append("  : ")
+        two_seg_map_list.append(two_seg_str[4])
+        two_seg_map_list.append("   ")
+        two_seg_map_list.append(two_seg_str[5])
+        two_seg_map_list.append("    ")
+        two_seg_map_list.append(two_seg_str[6])
+        two_seg_map_list.append("   ")
+        two_seg_map_list.append(two_seg_str[7])
+        two_seg_map_list.append("    ")
+        return "".join(two_seg_map_list)
+
     def calculate6_ipv6(self, input_ipv6_str: str, ipv6_prefix_len=None):
         """
         输入信息为 ipv6，前缀位数（可选）
@@ -582,25 +604,106 @@ class MainWindow:
         ipv6_address_full_text = f"ipv6地址完全式: {ipv6_address_full}\n"
         ipv6_address_short_text = f"ipv6地址缩写式: {ipv6_address_short}"
         ipv6_prefix_text = f"ipv6地址前缀: {ipv6_prefix_cidrv6}\n"
+        # ipv6用二进制表示
+        ipv6_address_full_seg_list = ipv6_address_full.split(":")
+        seg_1_2 = ipv6_address_full_seg_list[0] + ipv6_address_full_seg_list[1]
+        seg_1_2_ip_format = cofnet.int32_to_ip(int(seg_1_2, base=16))
+        ipv6_seg_1_2_binary_str = cofnet.ip_mask_to_binary_space(seg_1_2_ip_format)
+        seg_1_2_map_str = self.ipv6_2seg_to_map_binary_str(seg_1_2, 8)
+        ipv6_seg_1_2_binary_text = f"seg1_2: {ipv6_seg_1_2_binary_str}  1-32位\n{seg_1_2_map_str}<{seg_1_2_ip_format}>\n"
+        seg_3_4 = ipv6_address_full_seg_list[2] + ipv6_address_full_seg_list[3]
+        seg_3_4_ip_format = cofnet.int32_to_ip(int(seg_3_4, base=16))
+        ipv6_seg_3_4_binary_str = cofnet.ip_mask_to_binary_space(seg_3_4_ip_format)
+        seg_3_4_map_str = self.ipv6_2seg_to_map_binary_str(seg_3_4, 8)
+        ipv6_seg_3_4_binary_text = f"seg3_4: {ipv6_seg_3_4_binary_str}  33-64位\n{seg_3_4_map_str}<{seg_3_4_ip_format}>\n"
+        seg_5_6 = ipv6_address_full_seg_list[4] + ipv6_address_full_seg_list[5]
+        seg_5_6_ip_format = cofnet.int32_to_ip(int(seg_5_6, base=16))
+        ipv6_seg_5_6_binary_str = cofnet.ip_mask_to_binary_space(seg_5_6_ip_format)
+        seg_5_6_map_str = self.ipv6_2seg_to_map_binary_str(seg_5_6, 8)
+        ipv6_seg_5_6_binary_text = f"seg5_6: {ipv6_seg_5_6_binary_str}  65-96位\n{seg_5_6_map_str}<{seg_5_6_ip_format}>\n"
+        seg_7_8 = ipv6_address_full_seg_list[6] + ipv6_address_full_seg_list[7]
+        seg_7_8_ip_format = cofnet.int32_to_ip(int(seg_7_8, base=16))
+        ipv6_seg_7_8_binary_str = cofnet.ip_mask_to_binary_space(seg_7_8_ip_format)
+        seg_7_8_map_str = self.ipv6_2seg_to_map_binary_str(seg_7_8, 8)
+        ipv6_seg_7_8_binary_text = f"seg7_8: {ipv6_seg_7_8_binary_str}  97-128位\n{seg_7_8_map_str}<{seg_7_8_ip_format}>\n"
         # 将ip相关信息输出到Text控件中
         self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_address_full_text)
         start_index1 = "1.11"
         end_index1 = "1." + str(11 + len(ipv6_address_full))
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", start_index1, end_index1)
-
         self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_address_short_text)
         start_index2 = "2.11"
         end_index2 = "2." + str(11 + len(ipv6_address_short))
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", start_index2, end_index2)
         self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, "/" + new_ipv6_prefix_len + "\n")
-
         self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_prefix_text)
         start_index3 = "3.10"
         end_index3 = "3." + str(10 + len(ipv6_prefix_cidrv6))
-        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", start_index3, end_index3)
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", start_index3, end_index3)
+        self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, "ipv6地址用二进制表示如下：                   十进制表示：\n")
+        self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_seg_1_2_binary_text)
+        self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_seg_3_4_binary_text)
+        self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_seg_5_6_binary_text)
+        self.widget_dict_ipv6["text_ipv6_base_info"].insert(tkinter.END, ipv6_seg_7_8_binary_text)
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", "6.8", "6.40")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", "8.8", "8.40")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", "10.8", "10.40")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_address_fg", "12.8", "12.40")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("maskbyte_fg", "5.45", "5.51")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("maskbyte_fg", "7.45", "7.52")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("maskbyte_fg", "9.45", "9.52")
+        self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("maskbyte_fg", "11.45", "11.53")
+        two_seg_bin_prefix_num = int(new_ipv6_prefix_len) // 32
+        two_seg_bin_prefix_remainder = int(new_ipv6_prefix_len) % 32
+        color_bit_str_num = cofnet.get_maskint_with_space(two_seg_bin_prefix_remainder)
+        if two_seg_bin_prefix_num == 0:
+            start_index5 = "5.8"
+            end_index5 = "5." + str(8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", start_index5, end_index5)
+            start_index5_h = "5." + str(8 + color_bit_str_num)
+            end_index5_h = "5." + str(35 - color_bit_str_num + 8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", start_index5_h, end_index5_h)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", "7.8", "7.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", "9.8", "9.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", "11.8", "11.43")
+        elif two_seg_bin_prefix_num == 1:
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "5.8", "5.43")
+            start_index7 = "7.8"
+            end_index7 = "7." + str(8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", start_index7, end_index7)
+            start_index7_h = "7." + str(8 + color_bit_str_num)
+            end_index7_h = "7." + str(35 - color_bit_str_num + 8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", start_index7_h, end_index7_h)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", "9.8", "9.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", "11.8", "11.43")
+        elif two_seg_bin_prefix_num == 2:
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "5.8", "5.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "7.8", "7.43")
+            start_index9 = "9.8"
+            end_index9 = "9." + str(8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", start_index9, end_index9)
+            start_index9_h = "9." + str(8 + color_bit_str_num)
+            end_index9_h = "9." + str(35 - color_bit_str_num + 8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", start_index9_h, end_index9_h)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", "11.8", "11.43")
+        elif two_seg_bin_prefix_num == 3:
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "5.8", "5.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "7.8", "7.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "9.8", "9.43")
+            start_index11 = "11.8"
+            end_index11 = "11." + str(8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", start_index11, end_index11)
+            start_index11_h = "11." + str(8 + color_bit_str_num)
+            end_index11_h = "11." + str(35 - color_bit_str_num + 8 + color_bit_str_num)
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("hostseg_fg", start_index11_h, end_index11_h)
+        else:
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "5.8", "5.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "7.8", "7.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "9.8", "9.43")
+            self.widget_dict_ipv6["text_ipv6_base_info"].tag_add("ipv6_prefix_fg", "11.8", "11.43")
         # 更新子网掩码滑块及spinbox的值
         self.widget_dict_ipv6["sv_ipv6_prefix_len_int"].set(int(new_ipv6_prefix_len))
-        self.widget_dict_ipv6["ipv6_prefix_len_scale"].set(int(new_ipv6_prefix_len))
+        self.widget_dict_ipv6["ipv6_prefix_len_scale"].set(int(new_ipv6_prefix_len))  # 这里设置完后，会触发一次计算
         # 记录当前网段及子网掩码位数
         self.current_ipv6_prefix_cidrv6 = ipv6_prefix_cidrv6
         self.current_ipv6_prefix_len = new_ipv6_prefix_len
@@ -608,7 +711,7 @@ class MainWindow:
         self.widget_dict_ipv6["sv_input_ipv6"].set("")
         self.widget_dict_ipv6["sv_input_ipv6"].set(ipv6_address_short + "/" + str(new_ipv6_prefix_len))
 
-    def calculate6_cidrv6(self, ipv6addr_prefix_len_str, ipv6_prefix_len=None):
+    def calculate6_ipv6_with_prefix_len(self, ipv6addr_prefix_len_str, ipv6_prefix_len=None):
         # 输入信息为 ipv6/前缀位数，例如 "FD00::11/64"
         # ipv6_prefix_len如果要赋值，需要赋str类型的值
         self.widget_dict_ipv6["text_ipv6_base_info"].delete("1.0", tkinter.END)
