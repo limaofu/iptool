@@ -4,26 +4,29 @@
 # module name: cofnet
 # author: Cof-Lee
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-08-24
+# update: 2024-08-25
 
 """
-术语解析:
-maskint    ipv4掩码数字型 ，如 24 ，子网掩码位数                        类型: int
-maskbyte   ipv4掩码字节型 ，如 255.255.255.0 ，子网掩码，               类型: str
-ip         ipv4地址称，如 10.1.1.2 ，不含掩码（也可写为ip_address）      类型: str
-netseg     ipv4网段，如 10.1.0.0 ，不含掩码                           类型: str
-cidr       ipv4地址块，网段及掩码位数 ，如 10.1.0.0/16                  类型: str
-hostseg    ipv4主机号，一个ip地址去除网段后，剩下的部分                   类型: int
-ipv6               ipv6地址称，如 FD00:1234::abcd ，不含掩码（也可写为ipv6_address）        类型: str
-cidrv6             ipv6地址块，网段及掩码位数 ，如 FD00:1234::/64                          类型: str
-ipv6_full          ipv6地址完全展开式，非缩写形式，如 FD00:2222:3333:4444:5555:6666:7777:8888 ，不含掩码     类型: str
-ipv6_short         ipv6地址缩写式，全0块缩写形式，如 FD00::8888 ，不含掩码                   类型: str
-ipv6_seg           ipv6地址块（2字节为一块），如 FD00                                      类型: str
-ipv6_prefix        ipv6地址前缀，网段，如 FD00:: ，不含掩码                                类型: str
-ipv6_prefix_len    ipv6地址前缀长度 ，前缀大小，地址块位数，如 64                            类型: int
+★术语解析:
+ip                 ipv4地址称，如 10.1.1.2 ，不含掩码（也可写为ip_address）      类型: str
+cidr               ipv4地址块，网段及掩码位数 ，如 10.1.0.0/16                  类型: str
+maskint            ipv4掩码数字型 ，如 24 ，子网掩码位数                        类型: int
+maskbyte           ipv4掩码字节型 ，如 255.255.255.0 ，子网掩码，               类型: str
+netseg             ipv4网段，如 10.1.0.0 ，不含掩码                           类型: str
+hostseg            ipv4主机号，一个ip地址去除网段后，剩下的部分（十进制数值）       类型: int
+ip_with_maskint    ip/子网掩码位数 的格式，如 10.1.1.2/24                      类型: str
 
-规定：
-凡是is_开头的用于判断的函数，只返回True或False两个值，不报错，不抛出异常
+ipv6               ipv6地址称，如 FD00:1234::abcd ，不含掩码（也可写为ipv6_address）                       类型: str
+cidrv6             ipv6地址块，网段及掩码位数 ，如 FD00:1234::/64                                         类型: str
+ipv6_full          ipv6地址完全展开式，非缩写形式，如 FD00:2222:3333:4444:5555:6666:7777:8888 ，不含掩码     类型: str
+ipv6_short         ipv6地址缩写式，全0块缩写形式，如 FD00::8888 ，不含掩码                                  类型: str
+ipv6_seg           ipv6地址块（2字节为一块），如 FD00                                                     类型: str
+ipv6_prefix        ipv6地址前缀，网段，如 FD00:: ，不含掩码                                               类型: str
+ipv6_prefix_len    ipv6地址前缀长度 ，前缀大小，地址块位数，如 64                                           类型: int
+ipv6_with_prefix_len    ipv6地址前带缀长度 的格式，如 FD00::33/64                                         类型: str
+
+★规定：
+凡是以 is_ 开头的用于判断的函数，只返回True或False两个值，不报错，不抛出异常
 """
 
 from __future__ import absolute_import
@@ -102,7 +105,7 @@ def is_cidr(input_str: str) -> bool:
     return True
 
 
-def is_ip_maskint_addr(input_str: str) -> bool:
+def is_ip_with_maskint(input_str: str) -> bool:
     """
     判断 输入字符串 是否为 ip/子网掩码位数 的格式，返回bool值，是则返回True，否则返回False，例：
     输入 "10.99.1.55/24" 输出 True
@@ -282,8 +285,8 @@ def ip_mask_to_int(ip_or_mask: str) -> int:
 def ip_mask_to_binary_space(ip_or_mask: str) -> str:
     """
     将 ip地址或掩码byte型 转为 二进制数表示，★每8位数插入1个空格，例如：
-    输入 "255.255.255.0" 输出
-    输入 "192.168.1.1"   输出
+    输入 "255.255.255.0" 输出 "11111111 11111111 11111111 00000000"
+    输入 "192.168.1.1"   输出 "11000000 10101000 00000001 00000001"
     【输入错误会抛出Exception异常】
     """
     if not is_ip_addr(ip_or_mask):
@@ -298,7 +301,7 @@ def ip_mask_to_binary_space(ip_or_mask: str) -> str:
 
 def get_maskint_with_space(maskint: int) -> int:
     """
-    根据子网掩码位数，返回带空格时的掩码总长度，即每8位加1个空格字符
+    根据子网掩码位数，返回带空格时的二进制的掩码总长度，即每8位加1个空格字符
     【输入错误会抛出Exception异常】
     """
     if not isinstance(maskint, int):
@@ -555,11 +558,11 @@ def is_ipv6_addr(input_str: str) -> bool:
         return False
 
 
-def is_cidrv6(input_str: str) -> bool:
+def is_ipv6_with_prefix_len(input_str: str) -> bool:
     """
-    判断 输入字符串 是否为 cidrv6地址块，返回bool值，是则返回True，否则返回False
-    输入 "10.99.1.0/24" 输出 True
-    输入 "10.99.1.1/24" 输出 False ，不是正确的cidr地址块写法，24位掩码，的最后一字节必须为0
+    判断 输入字符串 是否为 ipv6地址带前缀长度的格式，返回bool值，是则返回True，否则返回False
+    输入 "FD00::/64" 输出 True
+    输入 "FD00::11" 输出 False ，没有带前缀长度
     """
     seg_list = input_str.split("/")
     if len(seg_list) != 2:
@@ -671,20 +674,23 @@ def convert_to_ipv6_short(ipv6_address: str) -> str:
     for ret_item in ret2:
         ret_len_list.append(ret_item.span()[1] - ret_item.span()[0])
         ret_list.append(ret_item)
-    longgest = max(ret_len_list)
-    if longgest >= 2:
-        max_index = ret_len_list.index(longgest)
-        ipv6_full_address_short_head = ipv6_full_address_short[0:ret_list[max_index].span()[0]]
-        ipv6_full_address_short_tail = ipv6_full_address_short[ret_list[max_index].span()[1]:]
-        if len(ipv6_full_address_short_head) != 0 and len(ipv6_full_address_short_tail) != 0:
-            return ":".join(ipv6_full_address_short_head) + "::" + ":".join(ipv6_full_address_short_tail)
-        elif len(ipv6_full_address_short_head) == 0 and len(ipv6_full_address_short_tail) != 0:
-            return "::" + ":".join(ipv6_full_address_short_tail)
-        elif len(ipv6_full_address_short_head) != 0 and len(ipv6_full_address_short_tail) == 0:
-            return ":".join(ipv6_full_address_short_head) + "::"
+    if len(ret_len_list) != 0:  # 查询到有全0块
+        longgest = max(ret_len_list)
+        if longgest >= 2:  # 至少要有2个全0块才缩写
+            max_index = ret_len_list.index(longgest)
+            ipv6_full_address_short_head = ipv6_full_address_short[0:ret_list[max_index].span()[0]]
+            ipv6_full_address_short_tail = ipv6_full_address_short[ret_list[max_index].span()[1]:]
+            if len(ipv6_full_address_short_head) != 0 and len(ipv6_full_address_short_tail) != 0:
+                return ":".join(ipv6_full_address_short_head) + "::" + ":".join(ipv6_full_address_short_tail)
+            elif len(ipv6_full_address_short_head) == 0 and len(ipv6_full_address_short_tail) != 0:
+                return "::" + ":".join(ipv6_full_address_short_tail)
+            elif len(ipv6_full_address_short_head) != 0 and len(ipv6_full_address_short_tail) == 0:
+                return ":".join(ipv6_full_address_short_head) + "::"
+            else:
+                return "::"
         else:
-            return "::"
-    else:
+            return ":".join(ipv6_full_address_short)
+    else:  # 没有查询到全0块
         return ":".join(ipv6_full_address_short)
 
 
