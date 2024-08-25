@@ -5,4 +5,5 @@ How to run it? 如何运行此程序？<br>
 python3 iptool.py
 ```
 效果图：<br>
-![demo1](not_resource_img/ipdemo1.png)
+![demo1](not_resource_img/ipv4_demo1.png)<br>
+![demo1](not_resource_img/ipv6_demo1.png)
