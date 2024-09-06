@@ -2,7 +2,13 @@
 # coding=utf-8
 # author: Cof-Lee
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-08-25
+# update: 2024-09-06
+
+"""
+pyinstaller打包为.exe程序:
+cmd>  cd  项目名称/venv/Scripts
+cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v240906.exe
+"""
 
 import tkinter
 from tkinter import messagebox
@@ -36,10 +42,10 @@ class MainWindow:
         self.screen_width = 0  # 在 MainWindow.show()里赋值
         self.screen_height = 0  # 在 MainWindow.show()里赋值
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v240825",
+                                "版本:  v240906",
                                 "本软件使用GPL-v3.0协议开源",
                                 "作者:  李茂福（Cof-Lee）",
-                                "更新时间: 2024-08-25"]
+                                "更新时间: 2024-09-06"]
         self.padx = 2
         self.pady = 2
         self.view_width = 20
@@ -133,6 +139,13 @@ class MainWindow:
         self.init_ipv6_page()
         self.init_ping_page()
         # 首次打开程序，显示的是ipv4界面
+        widget_index = 0
+        for widget in self.frame_nav.winfo_children():
+            if widget_index == PAGE_IPV4:
+                widget.config(bg="pink")
+            else:
+                widget.config(bg="white")
+            widget_index += 1
         self.frame_main_func_ipv4_page.place(x=0, y=0, width=self.width, height=self.frame_main_func_height)
         self.widget_dict_ipv4["entry_input_ip"].focus_force()
 
@@ -209,23 +222,23 @@ class MainWindow:
         calc_btn_frame.grid(row=2, column=0, columnspan=3)
         button_calculate = tkinter.Button(calc_btn_frame, text="计算", command=self.calculate)
         button_calculate.pack(side=tkinter.LEFT, padx=self.padx)
-        button_last_netseg = tkinter.Button(calc_btn_frame, text="↑上一子网", command=self.calculate_last_netseg)
+        button_last_netseg = tkinter.Button(calc_btn_frame, text="↑上一网段", command=self.calculate_last_netseg)
         button_last_netseg.pack(side=tkinter.LEFT, padx=self.padx)
-        button_next_netseg = tkinter.Button(calc_btn_frame, text="↓下一子网", command=self.calculate_next_netseg)
+        button_next_netseg = tkinter.Button(calc_btn_frame, text="↓下一网段", command=self.calculate_next_netseg)
         button_next_netseg.pack(side=tkinter.LEFT, padx=self.padx)
         button_clear = tkinter.Button(calc_btn_frame, text="清空", command=self.clear)
         button_clear.pack(side=tkinter.LEFT, padx=self.padx)
         button_exit = tkinter.Button(calc_btn_frame, text="退出", command=self.on_closing_main_window)
         button_exit.pack(side=tkinter.LEFT, padx=self.padx)
         # ip基础信息显示文本框
-        self.widget_dict_ipv4["text_ip_base_info"] = tkinter.Text(self.frame_main_func_ipv4_page, width=60, height=7,
+        self.widget_dict_ipv4["text_ip_base_info"] = tkinter.Text(self.frame_main_func_ipv4_page, width=64, height=7,
                                                                   font=self.text_font, bg="black", fg="white")
         self.widget_dict_ipv4["text_ip_base_info"].grid(row=3, column=0, columnspan=3, padx=self.padx, pady=self.pady)
         # ip同网段信息显示文本框
         label_other_hostseg = tkinter.Label(self.frame_main_func_ipv4_page, text="本网段其他主机ip:")
         label_other_hostseg.grid(row=4, column=0, padx=self.padx, pady=self.pady)
         self.widget_dict_ipv4["scrollbar_other_hostseg"] = tkinter.Scrollbar(self.frame_main_func_ipv4_page)
-        self.widget_dict_ipv4["text_other_hostseg"] = tkinter.Text(self.frame_main_func_ipv4_page, width=60, height=9,
+        self.widget_dict_ipv4["text_other_hostseg"] = tkinter.Text(self.frame_main_func_ipv4_page, width=64, height=9,
                                                                    font=self.text_font, bg="black", fg="white",
                                                                    yscrollcommand=self.widget_dict_ipv4["scrollbar_other_hostseg"].set)
         self.widget_dict_ipv4["text_other_hostseg"].grid(row=5, column=0, columnspan=3, padx=self.padx, pady=self.pady)
@@ -428,7 +441,10 @@ class MainWindow:
         host_seg_num = cofnet.get_hostseg_num(int(new_maskint))
         ip_netseg_hex_address = cofnet.ip_to_hex_string(ip_netseg)
         ip_netseg_info = f"ip地址对应网络号: {ip_netseg}/{new_maskint}  十六进制表示: {ip_netseg_hex_address}\n"
-        ip_hostseg_info = f"本ip为本网段第 {ip_hostseg + 1} 个ip（第1个ip是主机号为全0的ip）\n主机号可用ip总量: {host_seg_num}\n"
+        ip_hostseg_info = f"本ip为本网段第 {ip_hostseg + 1} 个ip（第1个ip是主机号为全0的ip）\n主机号可用ip总量: {host_seg_num} "
+        ip_netseg_int = cofnet.get_netseg_int(input_ip_str, new_maskint)
+        last_ip_address = cofnet.int32_to_ip(ip_netseg_int + host_seg_num - 1)
+        ip_hostseg_range = f"（{ip_netseg}->{last_ip_address}）"
         # 将ip相关信息输出到Text控件中
         self.widget_dict_ipv4["text_ip_base_info"].insert(tkinter.END, ip_address)
         start_index1 = "1.6"
@@ -456,7 +472,10 @@ class MainWindow:
         start_index5 = "6.9"
         end_index5 = "6." + str(9 + len(str(ip_hostseg)))
         self.widget_dict_ipv4["text_ip_base_info"].tag_add("hostseg_fg", start_index5, end_index5)
-        self.widget_dict_ipv4["text_ip_base_info"].tag_add("hostseg_num_fg", "7.11", tkinter.END)
+        start_index6 = "7.11"
+        end_index6 = "7." + str(11 + len(str(host_seg_num)))
+        self.widget_dict_ipv4["text_ip_base_info"].tag_add("hostseg_num_fg", start_index6, end_index6)
+        self.widget_dict_ipv4["text_ip_base_info"].insert(tkinter.END, ip_hostseg_range)
         # 更新子网掩码滑块及spinbox的值
         self.widget_dict_ipv4["sv_netmask_int"].set(int(new_maskint))
         self.widget_dict_ipv4["netmask_scale"].set(int(new_maskint))
