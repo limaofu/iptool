@@ -2,22 +2,49 @@
 # coding=utf-8
 # author: Cof-Lee
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-09-06
+# update: 2024-11-10
 
 """
 pyinstaller打包为.exe程序:
 cmd>  cd  项目名称/venv/Scripts
 cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v240906.exe
 """
-
+import time
 import tkinter
 from tkinter import messagebox
 from tkinter import font
+import pythonping
+import threading
+import ctypes
 import cofnet
 
 PAGE_IPV4 = 0
 PAGE_IPV6 = 1
 PAGE_PING = 2
+
+
+def stop_thread_silently(thread):
+    """
+    结束线程，如果线程里有time.sleep(n)之类的操作，则需要等待这个时长之后，才会结束此线程
+    即此方法无法立即结束sleep及其他阻塞函数导致的休眼线程，得等线程获得响应时才结束它
+    本函数不会抛出异常
+    """
+    if thread is None:
+        print("cofable_stop_thread_silently: thread obj is None")
+        return
+    thread_id = ctypes.c_long(thread.ident)
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(SystemExit))
+    # 正常结束线程时会返回数值1
+    if res == 0:
+        print("cofable_stop_thread_silently: invalid thread id")
+    elif res == 1:
+        print("cofable_stop_thread_silently: thread stopped")
+    else:
+        # 如果返回的值不为0，也不为1，则 you're in trouble
+        # if it returns a number greater than one, you're in trouble,
+        # and you should call it again with exc=NULL to revert the effect
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, None)
+        print("cofable_stop_thread_silently: PyThreadState_SetAsyncExc failed")
 
 
 class MainWindow:
@@ -42,10 +69,10 @@ class MainWindow:
         self.screen_width = 0  # 在 MainWindow.show()里赋值
         self.screen_height = 0  # 在 MainWindow.show()里赋值
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v240906",
+                                "版本:  v241110",
                                 "本软件使用GPL-v3.0协议开源",
                                 "作者:  李茂福（Cof-Lee）",
-                                "更新时间: 2024-09-06"]
+                                "更新时间: 2024-11-10"]
         self.padx = 2
         self.pady = 2
         self.view_width = 20
@@ -54,12 +81,16 @@ class MainWindow:
         self.font_size = 18  # 全局字体大小
         self.widget_dict_ipv4 = {}  # ipv4界面的控制对象字典
         self.widget_dict_ipv6 = {}  # ipv6界面的控制对象字典
+        self.widget_dict_ping = {}  # ping界面的控制对象字典
+        self.bottom_frame_of_ping_page_widget_dict = {}
         self.current_netseg = "0.0.0.0"
         self.current_maskint = 32
         self.is_calculated = False  # 是否已计算过，ipv4
         self.is_calculated6 = False  # 是否已计算过，ipv6
         self.current_ipv6_prefix_cidrv6 = "::/128"
         self.current_ipv6_prefix_len = 128
+        self.thread_start_ping_detect_list = []
+        self.is_quit = False  # 未退出主程序
 
     def show(self):
         self.window_obj = tkinter.Tk()  # ★★★创建主窗口对象★★★
@@ -116,9 +147,9 @@ class MainWindow:
                                           command=self.frame_main_func_ipv6_page_display)
         menu_button_ipv6.pack(side=tkinter.LEFT, padx=self.padx)
         # ping-界面按钮
-        # menu_button_ping = tkinter.Button(self.frame_nav, text="Ping检测", width=self.frame_nav_button_width, height=1, bg="white",
-        #                                   command=self.frame_main_func_ping_page_display)
-        # menu_button_ping.pack(side=tkinter.LEFT, padx=self.padx)
+        menu_button_ping = tkinter.Button(self.frame_nav, text="Ping检测", width=self.frame_nav_button_width, height=1, bg="white",
+                                          command=self.frame_main_func_ping_page_display)
+        menu_button_ping.pack(side=tkinter.LEFT, padx=self.padx)
 
     def create_frame_main_func(self):
         # 创建功能界面主frame
@@ -173,7 +204,7 @@ class MainWindow:
             else:
                 widget.config(bg="white")
             widget_index += 1
-        # 显示ipv4页面
+        # 显示ipv6页面
         self.frame_main_func_ipv4_page.place_forget()
         self.frame_main_func_ping_page.place_forget()
         self.frame_main_func_ipv6_page.place(x=0, y=0, width=self.width, height=self.frame_main_func_height)
@@ -188,10 +219,11 @@ class MainWindow:
             else:
                 widget.config(bg="white")
             widget_index += 1
-        # 显示ipv4页面
+        # 显示ping页面
         self.frame_main_func_ipv4_page.place_forget()
         self.frame_main_func_ipv6_page.place_forget()
         self.frame_main_func_ping_page.place(x=0, y=0, width=self.width, height=self.frame_main_func_height)
+        self.widget_dict_ping["text_input_ip"].focus_force()
 
     def init_ipv4_page(self):
         # 添加控件
@@ -302,7 +334,101 @@ class MainWindow:
         self.widget_dict_ipv6["text_ipv6_base_info"].tag_config("hostseg_num_fg", foreground="red")
 
     def init_ping_page(self):
-        pass
+        top_frame_height = 130
+        bottom_frame_height = self.frame_main_func_height - top_frame_height
+        top_frame = tkinter.Frame(self.frame_main_func_ping_page, bg="#71a861", borderwidth=0, width=self.width,
+                                  height=top_frame_height, relief='groove')
+        top_frame.grid_propagate(False)
+        top_frame.pack_propagate(False)
+        top_frame.grid(row=0, column=0)
+        bottom_frame = tkinter.Frame(self.frame_main_func_ping_page, bg="black", borderwidth=0, width=self.width,
+                                     height=bottom_frame_height, relief='groove')
+        bottom_frame.grid_propagate(False)
+        bottom_frame.pack_propagate(False)
+        bottom_frame.grid(row=1, column=0)
+        # 在 top_frame 添加控件
+        label_input_ip = tkinter.Label(top_frame, text="输入目标ip★:")  # ip信息为【必填】
+        label_input_ip.grid(row=0, column=0, padx=self.padx, pady=self.pady)
+        self.widget_dict_ping["text_input_ip"] = tkinter.Text(top_frame, width=60, height=6)
+        self.widget_dict_ping["text_input_ip"].grid(row=0, column=1, padx=self.padx, pady=self.pady)
+        button_start_ping = tkinter.Button(top_frame, text="开始检测", command=self.start_ping)  # ★开始检测
+        button_start_ping.grid(row=0, column=2, padx=self.padx, pady=self.pady)
+        # ping参数设置
+        parameter_frame = tkinter.Frame(top_frame, width=self.width - 25, height=30, bg=self.background)
+        parameter_frame.grid(row=2, column=0, columnspan=3)
+        label_count = tkinter.Label(parameter_frame, text="发包数:")
+        label_count.pack(side=tkinter.LEFT, padx=self.padx)
+        self.widget_dict_ping["sv_count"] = tkinter.StringVar()
+        self.widget_dict_ping["sv_count"].set(3)
+        self.widget_dict_ping["spinbox_count"] = tkinter.Spinbox(parameter_frame, from_=1, to=65535, increment=1,
+                                                                 textvariable=self.widget_dict_ping["sv_count"],
+                                                                 width=5, bg="#e2deff")
+        self.widget_dict_ping["spinbox_count"].pack(side=tkinter.LEFT, padx=self.padx)
+        label_interval = tkinter.Label(parameter_frame, text="发包间隔(s):")
+        label_interval.pack(side=tkinter.LEFT, padx=self.padx)
+        self.widget_dict_ping["sv_interval"] = tkinter.StringVar()
+        self.widget_dict_ping["spinbox_interval"] = tkinter.Spinbox(parameter_frame, from_=1, to=120, increment=1,
+                                                                    textvariable=self.widget_dict_ping["sv_interval"],
+                                                                    width=5, bg="#e2deff")
+        self.widget_dict_ping["spinbox_interval"].pack(side=tkinter.LEFT, padx=self.padx)
+        label_timeout = tkinter.Label(parameter_frame, text="超时(s):")
+        label_timeout.pack(side=tkinter.LEFT, padx=self.padx)
+        self.widget_dict_ping["sv_timeout"] = tkinter.StringVar()
+        self.widget_dict_ping["sv_timeout"].set(2)
+        self.widget_dict_ping["spinbox_timeout"] = tkinter.Spinbox(parameter_frame, from_=1, to=120, increment=1,
+                                                                   textvariable=self.widget_dict_ping["sv_timeout"],
+                                                                   width=5, bg="#e2deff")
+        self.widget_dict_ping["spinbox_timeout"].pack(side=tkinter.LEFT, padx=self.padx)
+        label_size = tkinter.Label(parameter_frame, text="发包数据大小(byte):")
+        label_size.pack(side=tkinter.LEFT, padx=self.padx)
+        self.widget_dict_ping["sv_size"] = tkinter.StringVar()
+        self.widget_dict_ping["spinbox_size"] = tkinter.Spinbox(parameter_frame, from_=1, to=65535, increment=1,
+                                                                textvariable=self.widget_dict_ping["sv_size"],
+                                                                width=5, bg="#e2deff")
+        self.widget_dict_ping["spinbox_size"].pack(side=tkinter.LEFT, padx=self.padx)
+        # 功能按钮
+        button_calculate = tkinter.Button(parameter_frame, text=" ")
+        button_calculate.pack(side=tkinter.LEFT, padx=self.padx)
+        button_clear = tkinter.Button(parameter_frame, text="重置参数", command=self.reset_ping_parameter)
+        button_clear.pack(side=tkinter.LEFT, padx=self.padx)
+        button_clear = tkinter.Button(parameter_frame, text="清空检测对项", command=self.clear_ping_target)
+        button_clear.pack(side=tkinter.LEFT, padx=self.padx)
+        button_exit = tkinter.Button(parameter_frame, text="退出", command=self.on_closing_main_window)
+        button_exit.pack(side=tkinter.LEFT, padx=self.padx)
+        # 在 bottom_frame 添加输出信息控件，添加canvas-frame滚动框
+        self.bottom_frame_of_ping_page_widget_dict["scrollbar_normal"] = tkinter.Scrollbar(bottom_frame, width=15)
+        self.bottom_frame_of_ping_page_widget_dict["scrollbar_normal"].pack(side=tkinter.RIGHT, fill=tkinter.Y)
+        self.bottom_frame_of_ping_page_widget_dict["canvas"] = tkinter.Canvas(bottom_frame, bg="#dddddd",
+                                                                              yscrollcommand=self.bottom_frame_of_ping_page_widget_dict[
+                                                                                  "scrollbar_normal"].set)
+        self.bottom_frame_of_ping_page_widget_dict["canvas"].place(x=0, y=0, width=int(self.width - 20),
+                                                                   height=bottom_frame_height)
+        self.bottom_frame_of_ping_page_widget_dict["scrollbar_normal"].config(
+            command=self.bottom_frame_of_ping_page_widget_dict["canvas"].yview)
+        self.bottom_frame_of_ping_page_widget_dict["frame"] = tkinter.Frame(self.bottom_frame_of_ping_page_widget_dict["canvas"],
+                                                                            bg="#dddddd")
+        self.bottom_frame_of_ping_page_widget_dict["frame"].pack(fill=tkinter.X, expand=tkinter.TRUE)
+        self.bottom_frame_of_ping_page_widget_dict["canvas"].create_window((0, 0),
+                                                                           window=self.bottom_frame_of_ping_page_widget_dict["frame"],
+                                                                           anchor='nw')
+        # self.update_canvas_of_bottom_frame_of_ping_page()
+
+    def proces_mouse_scroll_of_bottom_frame_of_ping_page(self, event):
+        if event.delta > 0:
+            self.bottom_frame_of_ping_page_widget_dict["canvas"].yview_scroll(-1, 'units')  # 向上移动
+        else:
+            self.bottom_frame_of_ping_page_widget_dict["canvas"].yview_scroll(1, 'units')  # 向下移动
+
+    def update_canvas_of_bottom_frame_of_ping_page(self):
+        # 更新Frame的尺寸
+        self.bottom_frame_of_ping_page_widget_dict["frame"].update_idletasks()
+        self.bottom_frame_of_ping_page_widget_dict["canvas"].configure(
+            scrollregion=(0, 0, self.bottom_frame_of_ping_page_widget_dict["frame"].winfo_width(),
+                          self.bottom_frame_of_ping_page_widget_dict["frame"].winfo_height()))
+        self.bottom_frame_of_ping_page_widget_dict["canvas"].bind("<MouseWheel>", self.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        self.bottom_frame_of_ping_page_widget_dict["frame"].bind("<MouseWheel>", self.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        # 滚动条移到最开头
+        self.bottom_frame_of_ping_page_widget_dict["canvas"].yview(tkinter.MOVETO, 0.0)  # MOVETO表示移动到，0.0表示最开头
 
     def front_end_input_func_printable_char_ipv4(self, event):
         """
@@ -369,6 +495,41 @@ class MainWindow:
         # self.current_maskint = 32
         self.is_calculated6 = False
 
+    def reset_ping_parameter(self):
+        self.widget_dict_ping["sv_count"].set(3)
+        self.widget_dict_ping["sv_interval"].set(1)
+        self.widget_dict_ping["sv_timeout"].set(2)
+        self.widget_dict_ping["sv_size"].set(1)
+
+    def clear_ping_target(self):
+        for thread_ping_detect in self.thread_start_ping_detect_list:
+            stop_thread_silently(thread_ping_detect)
+        self.clear_tkinter_widget(self.bottom_frame_of_ping_page_widget_dict["frame"])
+        self.update_canvas_of_bottom_frame_of_ping_page()
+
+    def start_ping(self):
+        detect_count = int(self.widget_dict_ping["sv_count"].get())
+        detect_interval = int(self.widget_dict_ping["sv_interval"].get())
+        detect_timeout = int(self.widget_dict_ping["sv_timeout"].get())
+        detect_pkg_size = int(self.widget_dict_ping["sv_size"].get())
+        target_ip_lines = self.widget_dict_ping["text_input_ip"].get("1.0", tkinter.END)
+        target_ip_list = []
+        for target_ip in target_ip_lines.split("\n"):
+            if cofnet.is_ip_addr(target_ip.strip()):
+                target_ip_list.append(target_ip)
+                ping_detect_item_info_obj = PingDetectItemInfo(top_frame=self.bottom_frame_of_ping_page_widget_dict["frame"],
+                                                               width=self.width, target_ip=target_ip, detect_count=detect_count,
+                                                               detect_interval=detect_interval, detect_timeout=detect_timeout,
+                                                               detect_pkg_size=detect_pkg_size, main_window=self)
+                thread_start_ping_detect = threading.Thread(target=ping_detect_item_info_obj.show)
+                self.thread_start_ping_detect_list.append(thread_start_ping_detect)
+                thread_start_ping_detect.start()
+        self.update_canvas_of_bottom_frame_of_ping_page()
+        if len(target_ip_list) > 0:
+            print(target_ip_list)
+        # 清空输入
+        self.widget_dict_ping["text_input_ip"].delete("1.0", tkinter.END)
+
     def calculate(self, maskint=None):
         # maskint如果要赋值，需要赋str类型的值
         input_ip_str = self.widget_dict_ipv4["sv_input_ip"].get().strip()
@@ -428,20 +589,21 @@ class MainWindow:
         self.widget_dict_ipv4["text_ip_base_info"].delete("1.0", tkinter.END)
         # 开始计算
         ip_hex_address = cofnet.ip_to_hex_string(input_ip_str)
-        ip_address = f"ip地址: {input_ip_str}    ip地址十六进制表示: {ip_hex_address}\n"
+        ip_address = f"ip地址: {input_ip_str}    ip地址十六进制表示: {ip_hex_address}\n"  # 第 1 行
         ip_int = cofnet.ip_mask_to_int(input_ip_str)
-        ip_int_show = f"ip地址转为整数值: {ip_int}（十进制）\n"
+        ip_int_show = f"ip地址转为整数值: {ip_int}（十进制）\n"  # 第 2 行
         ip_binary_str = cofnet.ip_mask_to_binary_space(input_ip_str)
-        ip_binary_show = f"ip地址二进制表示: {ip_binary_str}\n"
+        ip_binary_show = f"ip地址二进制表示: {ip_binary_str}\n"  # 第 3 行
         maskbyte = cofnet.maskint_to_maskbyte(int(new_maskint))
         netseg_hex_address = cofnet.ip_to_hex_string(maskbyte)
-        maskbyte_show = f"子网掩码: {maskbyte}    十六进制表示: {netseg_hex_address}\n"
+        wildcard_mask = cofnet.maskint_to_wildcard_mask(int(new_maskint))
+        maskbyte_show = f"子网掩码: {maskbyte}  （{netseg_hex_address}）    反掩码: {wildcard_mask}\n"  # 第 4 行
         ip_netseg = cofnet.get_netseg_byte(input_ip_str, new_maskint)
         ip_hostseg = cofnet.get_hostseg_int(input_ip_str, new_maskint)
         host_seg_num = cofnet.get_hostseg_num(int(new_maskint))
         ip_netseg_hex_address = cofnet.ip_to_hex_string(ip_netseg)
-        ip_netseg_info = f"ip地址对应网络号: {ip_netseg}/{new_maskint}  十六进制表示: {ip_netseg_hex_address}\n"
-        ip_hostseg_info = f"本ip为本网段第 {ip_hostseg + 1} 个ip（第1个ip是主机号为全0的ip）\n主机号可用ip总量: {host_seg_num} "
+        ip_netseg_info = f"ip地址对应网络号: {ip_netseg}/{new_maskint}  十六进制表示: {ip_netseg_hex_address}\n"  # 第 5 行
+        ip_hostseg_info = f"本ip为本网段第 {ip_hostseg + 1} 个ip（第1个ip是主机号为全0的ip）\n主机号可用ip总量: {host_seg_num} "  # 第 6、7 行
         ip_netseg_int = cofnet.get_netseg_int(input_ip_str, new_maskint)
         last_ip_address = cofnet.int32_to_ip(ip_netseg_int + host_seg_num - 1)
         ip_hostseg_range = f"（{ip_netseg}->{last_ip_address}）"
@@ -768,9 +930,137 @@ class MainWindow:
             widget.destroy()
 
     def on_closing_main_window(self):
-        print("MainWindow.on_closing_main_window: 退出了主程序")
         # self.window_obj.destroy()
+        for thread_ping_detect in self.thread_start_ping_detect_list:
+            stop_thread_silently(thread_ping_detect)
+        self.is_quit = True  # 退出了主程序
+        print("MainWindow.on_closing_main_window: 退出了主程序")
         self.window_obj.quit()
+
+
+class PingDetectItemInfo:
+    def __init__(self, top_frame=None, width=60, target_ip="", detect_count=3, detect_interval=1, detect_timeout=1,
+                 detect_pkg_size=1, main_window=None):
+        self.top_frame = top_frame
+        self.width = width - 25
+        self.height = 75
+        self.target_ip = target_ip
+        self.detect_count = detect_count
+        self.detect_interval = detect_interval
+        self.detect_timeout = detect_timeout
+        self.detect_pkg_size = detect_pkg_size
+        self.main_window = main_window
+        self.padx = 2
+        self.frame_detect_info_widget_dict = {}
+
+    def show(self):
+        frame_detect_info = tkinter.Frame(self.top_frame, width=self.width, height=self.height, borderwidth=0, bg="#75ac8f")
+        frame_detect_info.grid_propagate(False)
+        frame_detect_info.pack_propagate(False)
+        frame_detect_info.pack(pady=2)
+        frame_detect_info.bind("<MouseWheel>", self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        self.main_window.update_canvas_of_bottom_frame_of_ping_page()
+        # 添加ping检测信息展示控件
+        label_target_ip = tkinter.Label(frame_detect_info, text=self.target_ip, bd=0, width=15, height=3, bg="pink")
+        label_target_ip.bind("<MouseWheel>", self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        label_target_ip.pack(side=tkinter.LEFT, padx=self.padx)
+        self.frame_detect_info_widget_dict["status_canvas"] = tkinter.Canvas(frame_detect_info, width=int(self.height // 2),
+                                                                             height=int(self.height // 2), background="#75ac8f",
+                                                                             bd=0, highlightthickness=0)
+        self.frame_detect_info_widget_dict["status_canvas"].bind("<MouseWheel>",
+                                                                 self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        self.frame_detect_info_widget_dict["status_canvas"].pack(side=tkinter.LEFT, padx=self.padx)
+        self.frame_detect_info_widget_dict["label_current_result_statistics"] = tkinter.Label(frame_detect_info, text="检测结果", bd=0,
+                                                                                              width=22, height=4, bg="pink")
+        self.frame_detect_info_widget_dict["label_current_result_statistics"].bind("<MouseWheel>",
+                                                                                   self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        self.frame_detect_info_widget_dict["label_current_result_statistics"].pack(side=tkinter.LEFT, padx=self.padx)
+        # self.frame_detect_info_widget_dict["progress_bar_canvas"] = tkinter.Canvas(frame_detect_info, width=100,
+        #                                                                            height=int(self.height // 2), background="#1e1f22",
+        #                                                                            bd=0, highlightthickness=0)
+        # self.frame_detect_info_widget_dict["progress_bar_canvas"].bind("<MouseWheel>",
+        #                                                                self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
+        # self.frame_detect_info_widget_dict["progress_bar_canvas"].pack(side=tkinter.LEFT, padx=self.padx)
+        self.frame_detect_info_widget_dict["result_text"] = tkinter.Text(frame_detect_info, width=64, bd=1, height=5, bg="pink")
+        self.frame_detect_info_widget_dict["result_text"].pack(side=tkinter.LEFT, padx=self.padx)
+        # 开始ping检测
+        # thread_start_ping_detect = threading.Thread(target=self.start_ping_detect)
+        # thread_start_ping_detect.start()
+        self.start_ping_detect()
+
+    def start_ping_detect(self):
+        rtt_time_ms_list = []
+        lost_sum = 0
+        last_pkg_status_ok = True
+        for i in range(self.detect_count):
+            start_time = time.time()
+            try:
+                result = pythonping.ping(self.target_ip, count=1, timeout=self.detect_timeout, interval=0, size=self.detect_pkg_size)
+                if result.success():
+                    result_info_line = f"{i + 1} rtt_ms={result.rtt_max_ms} success\n"
+                    last_pkg_status_ok = True
+                else:
+                    result_info_line = f"{i + 1} rtt_ms={result.rtt_max_ms} timeout\n"
+                    lost_sum += 1
+                    last_pkg_status_ok = False
+                rtt_time_ms_list.append(result.rtt_max_ms)
+                current_result_statistics_str = [f"rtt_min_ms: {min(rtt_time_ms_list):9.4f}",
+                                                 f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
+                                                 f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
+                                                 f"lost/total: {lost_sum}/{self.detect_count}"]
+                if self.main_window.is_quit:
+                    return
+                else:
+                    self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line)
+                    self.frame_detect_info_widget_dict["result_text"].see(tkinter.END)
+                    self.frame_detect_info_widget_dict["label_current_result_statistics"].__setitem__('text', "\n".join(
+                        current_result_statistics_str))
+                    self.frame_detect_info_widget_dict["status_canvas"].delete(
+                        *self.frame_detect_info_widget_dict["status_canvas"].find_all())
+                    if last_pkg_status_ok:
+                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
+                                                                                        fill="green",
+                                                                                        width=0, outline="green")
+                    else:
+                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
+                                                                                        fill="red",
+                                                                                        width=0, outline="red")
+                    using_time = time.time() - start_time
+                    if self.detect_interval > using_time:
+                        wait_time = self.detect_interval - using_time
+                    else:
+                        wait_time = 0
+                    time.sleep(wait_time)
+            except OSError as err:
+                lost_sum += 1
+                rtt_time_ms_list.append(self.detect_timeout * 1000)
+                last_pkg_status_ok = False
+                current_result_statistics_str = [f"rtt_min_ms: {min(rtt_time_ms_list):9.4f}",
+                                                 f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
+                                                 f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
+                                                 f"lost/total: {lost_sum}/{self.detect_count}"]
+                result_info_line = f"{i + 1} {err.__str__()}\n"
+                if self.main_window.is_quit:
+                    return
+                else:
+                    self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line)
+                    self.frame_detect_info_widget_dict["result_text"].see(tkinter.END)
+                    self.frame_detect_info_widget_dict["label_current_result_statistics"].__setitem__('text', "\n".join(
+                        current_result_statistics_str))
+                    if last_pkg_status_ok:
+                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
+                                                                                        fill="green",
+                                                                                        width=0, outline="green")
+                    else:
+                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
+                                                                                        fill="red",
+                                                                                        width=0, outline="red")
+                    using_time = time.time() - start_time
+                    if self.detect_interval > using_time:
+                        wait_time = self.detect_interval - using_time
+                    else:
+                        wait_time = 0
+                    time.sleep(wait_time)
 
 
 if __name__ == '__main__':
