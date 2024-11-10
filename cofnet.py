@@ -4,24 +4,25 @@
 # module name: cofnet
 # author: Cof-Lee
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-08-25
+# update: 2024-11-10
 
 """
 ★术语解析:
-ip                 ipv4地址称，如 10.1.1.2 ，不含掩码（也可写为ip_address）      类型: str
+ip                 ipv4地址，如 10.1.1.2 ，不含掩码（也可写为ip_address）       类型: str
 cidr               ipv4地址块，网段及掩码位数 ，如 10.1.0.0/16                  类型: str
-maskint            ipv4掩码数字型 ，如 24 ，子网掩码位数                        类型: int
-maskbyte           ipv4掩码字节型 ，如 255.255.255.0 ，子网掩码，               类型: str
+maskint            ipv4掩码数字型，如 24 ，子网掩码位数                         类型: int
+maskbyte           ipv4掩码字节型，如 255.255.255.0 ，子网掩码                 类型: str
 netseg             ipv4网段，如 10.1.0.0 ，不含掩码                           类型: str
 hostseg            ipv4主机号，一个ip地址去除网段后，剩下的部分（十进制数值）       类型: int
 ip_with_maskint    ip/子网掩码位数 的格式，如 10.1.1.2/24                      类型: str
+wildcard_mask      反掩码，也叫通配符掩码，如 0.0.0.255                         类型: str
 
-ipv6               ipv6地址称，如 FD00:1234::abcd ，不含掩码（也可写为ipv6_address）                       类型: str
+ipv6               ipv6地址，如 FD00:1234::abcd ，不含掩码（也可写为ipv6_address）                        类型: str
 cidrv6             ipv6地址块，网段及掩码位数 ，如 FD00:1234::/64                                         类型: str
-ipv6_full          ipv6地址完全展开式，非缩写形式，如 FD00:2222:3333:4444:5555:6666:7777:8888 ，不含掩码     类型: str
+ipv6_full          ipv6地址完全展开式，非缩写形式，如 FD00:2222:3333:4444:5555:6666:0077:8888 ，不含前缀长度     类型: str
 ipv6_short         ipv6地址缩写式，全0块缩写形式，如 FD00::8888 ，不含掩码                                  类型: str
 ipv6_seg           ipv6地址块（2字节为一块），如 FD00                                                     类型: str
-ipv6_prefix        ipv6地址前缀，网段，如 FD00:: ，不含掩码                                               类型: str
+ipv6_prefix        ipv6地址前缀，网段，如 FD00:: ，不含前缀长度                                            类型: str
 ipv6_prefix_len    ipv6地址前缀长度 ，前缀大小，地址块位数，如 64                                           类型: int
 ipv6_with_prefix_len    ipv6地址前带缀长度 的格式，如 FD00::33/64                                         类型: str
 
@@ -40,7 +41,7 @@ import re
 # #### ipv4 ####
 def is_ip_addr(input_str: str) -> bool:
     """
-    判断 输入字符串 是否为 ip地址（不带掩码），返回bool值，是则返回True，否则返回False
+    判断 输入字符串 是否为 ipv4地址（不带掩码），返回bool值，是则返回True，否则返回False
     """
     seg_list = input_str.split(".")
     if len(seg_list) != 4:
@@ -210,6 +211,27 @@ def maskint_to_maskbyte(maskint: int) -> str:
     if i < 4:
         mask[i] = 255 - (2 ** (8 - maskint) - 1)
     mask_str_list = map(str, mask)
+    return ".".join(mask_str_list)
+
+
+def maskint_to_wildcard_mask(maskint: int) -> str:
+    """
+    将子网掩码数字型 转为 反掩码，例如：
+    输入 16 输出 "0.0.255.255"
+    输入 24 输出 "0.0.0.255
+    【输入错误会抛出Exception异常】
+    """
+    if maskint < 0 or maskint > 32:
+        raise Exception("子网掩码数值应在[0-32]", maskint)
+    wildcard_mask = [255, 255, 255, 255]
+    i = 0
+    while maskint >= 8:
+        wildcard_mask[i] = 0
+        i += 1
+        maskint -= 8
+    if i < 4:
+        wildcard_mask[i] = 2 ** (8 - maskint) - 1
+    mask_str_list = map(str, wildcard_mask)
     return ".".join(mask_str_list)
 
 
