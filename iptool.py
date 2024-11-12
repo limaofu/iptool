@@ -506,6 +506,7 @@ class MainWindow:
         self.widget_dict_ping["sv_size"].set(1)
 
     def clear_ping_target(self):
+        self.is_stopped_all_ping_detect = True
         for thread_ping_detect in self.thread_start_ping_detect_list:
             stop_thread_silently(thread_ping_detect)
         self.clear_tkinter_widget(self.bottom_frame_of_ping_page_widget_dict["frame"])
@@ -937,7 +938,8 @@ class MainWindow:
             widget.destroy()
 
     def on_closing_main_window(self):
-        self.is_quit = True  # 退出了主程序
+        self.is_stopped_all_ping_detect = True
+        self.is_quit = True
         for thread_ping_detect in self.thread_start_ping_detect_list:
             stop_thread_silently(thread_ping_detect)
         print("MainWindow.on_closing_main_window: 退出了主程序")
