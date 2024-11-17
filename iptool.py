@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # coding=utf-8
-# author: Cof-Lee
+# author: Cof-Lee <cof8007@gmail.com>
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-11-11
+# update: 2024-11-17
 
 """
 pyinstaller打包为.exe程序:
 cmd>  cd  项目名称/venv/Scripts
-cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v241111.exe
+cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v241117.exe
 """
+
 import time
 import tkinter
 from tkinter import messagebox
@@ -69,10 +70,10 @@ class MainWindow:
         self.screen_width = 0  # 在 MainWindow.show()里赋值
         self.screen_height = 0  # 在 MainWindow.show()里赋值
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v241111",
+                                "版本:  v241117",
                                 "本软件使用GPL-v3.0协议开源",
                                 "作者:  李茂福（Cof-Lee）",
-                                "更新时间: 2024-11-11"]
+                                "更新时间: 2024-11-17"]
         self.padx = 2
         self.pady = 2
         self.view_width = 20
@@ -89,6 +90,18 @@ class MainWindow:
         self.is_calculated6 = False  # 是否已计算过，ipv6
         self.current_ipv6_prefix_cidrv6 = "::/128"
         self.current_ipv6_prefix_len = 128
+        self.detect_count_default = 3
+        self.detect_count_min = 1
+        self.detect_count_max = 1000000
+        self.detect_interval_default = 1  # 单位：秒
+        self.detect_interval_min = 0
+        self.detect_interval_max = 120
+        self.detect_timeout_default = 2  # 单位：秒
+        self.detect_timeout_min = 1
+        self.detect_timeout_max = 120
+        self.detect_pkg_size_default = 1  # 单位：字节
+        self.detect_pkg_size_min = 1
+        self.detect_pkg_size_max = 65535
         self.thread_start_ping_detect_list = []
         self.is_quit = False  # False表示未退出主程序
         self.is_stopped_all_ping_detect = False  # 表示未停止检测
@@ -360,30 +373,36 @@ class MainWindow:
         label_count = tkinter.Label(parameter_frame, text="发包数:")
         label_count.pack(side=tkinter.LEFT, padx=self.padx)
         self.widget_dict_ping["sv_count"] = tkinter.StringVar()
-        self.widget_dict_ping["sv_count"].set(3)
-        self.widget_dict_ping["spinbox_count"] = tkinter.Spinbox(parameter_frame, from_=1, to=65535, increment=1,
+        self.widget_dict_ping["sv_count"].set(self.detect_count_default)
+        self.widget_dict_ping["spinbox_count"] = tkinter.Spinbox(parameter_frame, from_=self.detect_count_min, to=self.detect_count_max,
+                                                                 increment=1,
                                                                  textvariable=self.widget_dict_ping["sv_count"],
-                                                                 width=5, bg="#e2deff")
+                                                                 width=7, bg="#e2deff")
         self.widget_dict_ping["spinbox_count"].pack(side=tkinter.LEFT, padx=self.padx)
         label_interval = tkinter.Label(parameter_frame, text="发包间隔(s):")
         label_interval.pack(side=tkinter.LEFT, padx=self.padx)
         self.widget_dict_ping["sv_interval"] = tkinter.StringVar()
-        self.widget_dict_ping["spinbox_interval"] = tkinter.Spinbox(parameter_frame, from_=1, to=120, increment=1,
+        self.widget_dict_ping["sv_interval"].set(self.detect_interval_default)
+        self.widget_dict_ping["spinbox_interval"] = tkinter.Spinbox(parameter_frame, from_=self.detect_interval_min,
+                                                                    to=self.detect_interval_max, increment=1,
                                                                     textvariable=self.widget_dict_ping["sv_interval"],
-                                                                    width=5, bg="#e2deff")
+                                                                    width=3, bg="#e2deff")
         self.widget_dict_ping["spinbox_interval"].pack(side=tkinter.LEFT, padx=self.padx)
         label_timeout = tkinter.Label(parameter_frame, text="超时(s):")
         label_timeout.pack(side=tkinter.LEFT, padx=self.padx)
         self.widget_dict_ping["sv_timeout"] = tkinter.StringVar()
-        self.widget_dict_ping["sv_timeout"].set(2)
-        self.widget_dict_ping["spinbox_timeout"] = tkinter.Spinbox(parameter_frame, from_=1, to=120, increment=1,
+        self.widget_dict_ping["sv_timeout"].set(self.detect_timeout_default)
+        self.widget_dict_ping["spinbox_timeout"] = tkinter.Spinbox(parameter_frame, from_=self.detect_timeout_min,
+                                                                   to=self.detect_timeout_max, increment=1,
                                                                    textvariable=self.widget_dict_ping["sv_timeout"],
-                                                                   width=5, bg="#e2deff")
+                                                                   width=3, bg="#e2deff")
         self.widget_dict_ping["spinbox_timeout"].pack(side=tkinter.LEFT, padx=self.padx)
         label_size = tkinter.Label(parameter_frame, text="发包数据大小(byte):")
         label_size.pack(side=tkinter.LEFT, padx=self.padx)
         self.widget_dict_ping["sv_size"] = tkinter.StringVar()
-        self.widget_dict_ping["spinbox_size"] = tkinter.Spinbox(parameter_frame, from_=1, to=65535, increment=1,
+        self.widget_dict_ping["sv_size"].set(self.detect_pkg_size_default)
+        self.widget_dict_ping["spinbox_size"] = tkinter.Spinbox(parameter_frame, from_=self.detect_pkg_size_min,
+                                                                to=self.detect_pkg_size_max, increment=1,
                                                                 textvariable=self.widget_dict_ping["sv_size"],
                                                                 width=5, bg="#e2deff")
         self.widget_dict_ping["spinbox_size"].pack(side=tkinter.LEFT, padx=self.padx)
@@ -516,17 +535,50 @@ class MainWindow:
     def start_ping(self):
         self.is_stopped_all_ping_detect = False
         self.is_quit = False
-        detect_count = int(self.widget_dict_ping["sv_count"].get())
-        detect_interval = int(self.widget_dict_ping["sv_interval"].get())
-        detect_timeout = int(self.widget_dict_ping["sv_timeout"].get())
-        detect_pkg_size = int(self.widget_dict_ping["sv_size"].get())
+        try:
+            detect_count = int(self.widget_dict_ping["sv_count"].get())
+        except ValueError:
+            detect_count = self.detect_count_default
+        try:
+            detect_interval = int(self.widget_dict_ping["sv_interval"].get())
+        except ValueError:
+            detect_interval = self.detect_interval_default
+        try:
+            detect_timeout = int(self.widget_dict_ping["sv_timeout"].get())
+        except ValueError:
+            detect_timeout = self.detect_timeout_default
+        try:
+            detect_pkg_size = int(self.widget_dict_ping["sv_size"].get())
+        except ValueError:
+            detect_pkg_size = self.detect_pkg_size_default
+        if detect_count < self.detect_count_min:
+            detect_count = self.detect_count_min
+        if detect_count > self.detect_count_max:
+            detect_count = self.detect_count_max
+        self.widget_dict_ping["sv_count"].set(detect_count)
+        if detect_interval < self.detect_interval_min:
+            detect_interval = self.detect_interval_min
+        if detect_interval > self.detect_interval_max:
+            detect_interval = self.detect_interval_max
+        self.widget_dict_ping["sv_interval"].set(detect_interval)
+        if detect_timeout < self.detect_timeout_min:
+            detect_timeout = self.detect_timeout_min
+        if detect_timeout > self.detect_timeout_max:
+            detect_timeout = self.detect_timeout_max
+        self.widget_dict_ping["sv_timeout"].set(detect_timeout)
+        if detect_pkg_size < self.detect_pkg_size_min:
+            detect_pkg_size = self.detect_pkg_size_min
+        if detect_pkg_size > self.detect_pkg_size_max:
+            detect_pkg_size = self.detect_pkg_size_max
+        self.widget_dict_ping["sv_size"].set(detect_pkg_size)
         target_ip_lines = self.widget_dict_ping["text_input_ip"].get("1.0", tkinter.END)
         target_ip_list = []
         for target_ip in target_ip_lines.split("\n"):
-            if cofnet.is_ip_addr(target_ip.strip()):
-                target_ip_list.append(target_ip)
+            target_ip_strip = target_ip.strip()
+            if cofnet.is_ip_addr(target_ip_strip):
+                target_ip_list.append(target_ip_strip)
                 ping_detect_item_info_obj = PingDetectItemInfo(top_frame=self.bottom_frame_of_ping_page_widget_dict["frame"],
-                                                               width=self.width, target_ip=target_ip, detect_count=detect_count,
+                                                               width=self.width, target_ip=target_ip_strip, detect_count=detect_count,
                                                                detect_interval=detect_interval, detect_timeout=detect_timeout,
                                                                detect_pkg_size=detect_pkg_size, main_window=self)
                 thread_start_ping_detect = threading.Thread(target=ping_detect_item_info_obj.show)
@@ -598,9 +650,9 @@ class MainWindow:
         # 开始计算
         ip_hex_address = cofnet.ip_to_hex_string(input_ip_str)
         ip_address = f"ip地址: {input_ip_str}    ip地址十六进制表示: {ip_hex_address}\n"  # 第 1 行
-        ip_int = cofnet.ip_mask_to_int(input_ip_str)
+        ip_int = cofnet.ip_or_maskbyte_to_int(input_ip_str)
         ip_int_show = f"ip地址转为整数值: {ip_int}（十进制）\n"  # 第 2 行
-        ip_binary_str = cofnet.ip_mask_to_binary_space(input_ip_str)
+        ip_binary_str = cofnet.ip_or_maskbyte_to_binary_with_space(input_ip_str)
         ip_binary_show = f"ip地址二进制表示: {ip_binary_str}\n"  # 第 3 行
         maskbyte = cofnet.maskint_to_maskbyte(int(new_maskint))
         netseg_hex_address = cofnet.ip_to_hex_string(maskbyte)
@@ -701,7 +753,7 @@ class MainWindow:
             return
         else:
             self.widget_dict_ipv4["text_ip_base_info"].delete("1.0", tkinter.END)
-            current_netseg_int = cofnet.ip_mask_to_int(self.current_netseg)
+            current_netseg_int = cofnet.ip_or_maskbyte_to_int(self.current_netseg)
             shift_bit = 32 - int(self.current_maskint)
             last_netseg = cofnet.int32_to_ip(((current_netseg_int >> shift_bit) - 1) << shift_bit)
             self.calculate_ip(last_netseg, self.current_maskint)
@@ -719,7 +771,7 @@ class MainWindow:
             return
         else:
             self.widget_dict_ipv4["text_ip_base_info"].delete("1.0", tkinter.END)
-            current_netseg_int = cofnet.ip_mask_to_int(self.current_netseg)
+            current_netseg_int = cofnet.ip_or_maskbyte_to_int(self.current_netseg)
             shift_bit = 32 - int(self.current_maskint)
             next_netseg = cofnet.int32_to_ip(((current_netseg_int >> shift_bit) + 1) << shift_bit)
             self.calculate_ip(next_netseg, self.current_maskint)
@@ -734,23 +786,18 @@ class MainWindow:
     def calculate_ip_range(self, input_ip_str):
         # 输入信息为 ip-range，例如 "10.99.1.33-55"
         # 需要计算ip默认所属类型，Class A,B,C,D
-        ip_address = ""
-        maskint = 32
-        maskbyte = "255.255.255.255"
+        pass
 
     def calculate_ip_range2(self, input_ip_str):
         # 输入信息为 ip-range，例如 "10.99.1.33-10.99.1.55"
-        ip_address = ""
-        maskint = 32
-        maskbyte = "255.255.255.255"
+        pass
 
     def calculate_cidr(self, input_ip_str):  # 被前面的 calculate_ip_maskint() 给替代了
         # 输入信息为 cidr，例如 "10.99.1.0/24"
-        ip_address = ""
-        maskint = 32
-        maskbyte = "255.255.255.255"
+        pass
 
-    def ipv6_2seg_to_map_binary_str(self, two_seg_str: str, binary_str_offset: int) -> str:
+    @staticmethod
+    def ipv6_2seg_to_map_binary_str(two_seg_str: str, binary_str_offset: int) -> str:
         two_seg_map_list = []
         for i in range(binary_str_offset):
             two_seg_map_list.append(" ")
@@ -797,22 +844,22 @@ class MainWindow:
         ipv6_address_full_seg_list = ipv6_address_full.split(":")
         seg_1_2 = ipv6_address_full_seg_list[0] + ipv6_address_full_seg_list[1]
         seg_1_2_ip_format = cofnet.int32_to_ip(int(seg_1_2, base=16))
-        ipv6_seg_1_2_binary_str = cofnet.ip_mask_to_binary_space(seg_1_2_ip_format)
+        ipv6_seg_1_2_binary_str = cofnet.ip_or_maskbyte_to_binary_with_space(seg_1_2_ip_format)
         seg_1_2_map_str = self.ipv6_2seg_to_map_binary_str(seg_1_2, 8)
         ipv6_seg_1_2_binary_text = f"seg1_2: {ipv6_seg_1_2_binary_str}  1-32位\n{seg_1_2_map_str}<{seg_1_2_ip_format}>\n"
         seg_3_4 = ipv6_address_full_seg_list[2] + ipv6_address_full_seg_list[3]
         seg_3_4_ip_format = cofnet.int32_to_ip(int(seg_3_4, base=16))
-        ipv6_seg_3_4_binary_str = cofnet.ip_mask_to_binary_space(seg_3_4_ip_format)
+        ipv6_seg_3_4_binary_str = cofnet.ip_or_maskbyte_to_binary_with_space(seg_3_4_ip_format)
         seg_3_4_map_str = self.ipv6_2seg_to_map_binary_str(seg_3_4, 8)
         ipv6_seg_3_4_binary_text = f"seg3_4: {ipv6_seg_3_4_binary_str}  33-64位\n{seg_3_4_map_str}<{seg_3_4_ip_format}>\n"
         seg_5_6 = ipv6_address_full_seg_list[4] + ipv6_address_full_seg_list[5]
         seg_5_6_ip_format = cofnet.int32_to_ip(int(seg_5_6, base=16))
-        ipv6_seg_5_6_binary_str = cofnet.ip_mask_to_binary_space(seg_5_6_ip_format)
+        ipv6_seg_5_6_binary_str = cofnet.ip_or_maskbyte_to_binary_with_space(seg_5_6_ip_format)
         seg_5_6_map_str = self.ipv6_2seg_to_map_binary_str(seg_5_6, 8)
         ipv6_seg_5_6_binary_text = f"seg5_6: {ipv6_seg_5_6_binary_str}  65-96位\n{seg_5_6_map_str}<{seg_5_6_ip_format}>\n"
         seg_7_8 = ipv6_address_full_seg_list[6] + ipv6_address_full_seg_list[7]
         seg_7_8_ip_format = cofnet.int32_to_ip(int(seg_7_8, base=16))
-        ipv6_seg_7_8_binary_str = cofnet.ip_mask_to_binary_space(seg_7_8_ip_format)
+        ipv6_seg_7_8_binary_str = cofnet.ip_or_maskbyte_to_binary_with_space(seg_7_8_ip_format)
         seg_7_8_map_str = self.ipv6_2seg_to_map_binary_str(seg_7_8, 8)
         ipv6_seg_7_8_binary_text = f"seg7_8: {ipv6_seg_7_8_binary_str}  97-128位\n{seg_7_8_map_str}<{seg_7_8_ip_format}>\n"
         # 将ip相关信息输出到Text控件中
@@ -985,18 +1032,10 @@ class PingDetectItemInfo:
         self.frame_detect_info_widget_dict["label_current_result_statistics"].bind("<MouseWheel>",
                                                                                    self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
         self.frame_detect_info_widget_dict["label_current_result_statistics"].pack(side=tkinter.LEFT, padx=self.padx)
-        # self.frame_detect_info_widget_dict["progress_bar_canvas"] = tkinter.Canvas(frame_detect_info, width=100,
-        #                                                                            height=int(self.height // 2), background="#1e1f22",
-        #                                                                            bd=0, highlightthickness=0)
-        # self.frame_detect_info_widget_dict["progress_bar_canvas"].bind("<MouseWheel>",
-        #                                                                self.main_window.proces_mouse_scroll_of_bottom_frame_of_ping_page)
-        # self.frame_detect_info_widget_dict["progress_bar_canvas"].pack(side=tkinter.LEFT, padx=self.padx)
         self.frame_detect_info_widget_dict["result_text"] = tkinter.Text(frame_detect_info, width=64, bd=1, height=5, bg="#9ec29e")
         self.frame_detect_info_widget_dict["result_text"].pack(side=tkinter.LEFT, padx=self.padx)
         self.frame_detect_info_widget_dict["result_text"].tag_config("tag_config_red_fg", foreground="red")
         # 开始ping检测
-        # thread_start_ping_detect = threading.Thread(target=self.start_ping_detect)
-        # thread_start_ping_detect.start()
         self.start_ping_detect()
 
     def start_ping_detect(self):
@@ -1004,6 +1043,7 @@ class PingDetectItemInfo:
         lost_sum = 0
         for i in range(self.detect_count):
             if self.main_window.is_stopped_all_ping_detect:
+                self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, "<<Stopped>>")
                 return
             start_time = time.time()
             try:
@@ -1014,15 +1054,16 @@ class PingDetectItemInfo:
                                                  f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
                                                  f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
                                                  f"lost/total: {lost_sum}/{self.detect_count}"]
+                current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                 if self.main_window.is_quit:
                     return
                 else:
                     if result.success():
-                        result_info_line = f"{i + 1} rtt_ms={result.rtt_max_ms} success\n"
+                        result_info_line = f"{i + 1}  rtt_ms={result.rtt_max_ms} success  {current_time}\n"
                         last_pkg_status_ok = True
                         self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line)
                     else:
-                        result_info_line = f"{i + 1} rtt_ms={result.rtt_max_ms} timeout\n"
+                        result_info_line = f"{i + 1}  rtt_ms={result.rtt_max_ms} timeout  {current_time}\n"
                         lost_sum += 1
                         last_pkg_status_ok = False
                         self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line, "tag_config_red_fg")
@@ -1046,6 +1087,7 @@ class PingDetectItemInfo:
                         wait_time = 0
                     time.sleep(wait_time)
             except OSError as err:
+                current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                 lost_sum += 1
                 rtt_time_ms_list.append(self.detect_timeout * 1000)
                 last_pkg_status_ok = False
@@ -1053,7 +1095,7 @@ class PingDetectItemInfo:
                                                  f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
                                                  f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
                                                  f"lost/total: {lost_sum}/{self.detect_count}"]
-                result_info_line = f"{i + 1} {err.__str__()}\n"
+                result_info_line = f"{i + 1}  {err.__str__()}  {current_time}\n"
                 if self.main_window.is_quit:
                     return
                 else:
@@ -1075,6 +1117,7 @@ class PingDetectItemInfo:
                     else:
                         wait_time = 0
                     time.sleep(wait_time)
+        self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, "<<Finished>>")
 
 
 if __name__ == '__main__':
