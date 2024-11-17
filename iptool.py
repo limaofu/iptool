@@ -2,19 +2,19 @@
 # coding=utf-8
 # author: Cof-Lee <cof8007@gmail.com>
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-11-17
+# update: 2024-11-18
 
 """
 pyinstaller打包为.exe程序:
 cmd>  cd  项目名称/venv/Scripts
-cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v241117.exe
+cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v241118.exe
 """
 
 import time
 import tkinter
 from tkinter import messagebox
 from tkinter import font
-import pythonping
+import cofping
 import threading
 import ctypes
 import cofnet
@@ -31,21 +31,19 @@ def stop_thread_silently(thread):
     本函数不会抛出异常
     """
     if thread is None:
-        print("cofable_stop_thread_silently: thread obj is None")
+        print("iptool.stop_thread_silently: thread obj is None")
         return
     thread_id = ctypes.c_long(thread.ident)
     res = ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(SystemExit))
     # 正常结束线程时会返回数值1
     if res == 0:
-        print("cofable_stop_thread_silently: invalid thread id")
+        print("iptool.stop_thread_silently: invalid thread id")
     elif res == 1:
-        print("cofable_stop_thread_silently: thread stopped")
+        print("iptool.stop_thread_silently: thread stopped")
     else:
-        # 如果返回的值不为0，也不为1，则 you're in trouble
-        # if it returns a number greater than one, you're in trouble,
-        # and you should call it again with exc=NULL to revert the effect
+        # 如果返回的值不为0，也不为1，则:
         ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, None)
-        print("cofable_stop_thread_silently: PyThreadState_SetAsyncExc failed")
+        print("iptool.stop_thread_silently: PyThreadState_SetAsyncExc failed")
 
 
 class MainWindow:
@@ -70,10 +68,10 @@ class MainWindow:
         self.screen_width = 0  # 在 MainWindow.show()里赋值
         self.screen_height = 0  # 在 MainWindow.show()里赋值
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v241117",
+                                "版本:  v241118",
                                 "本软件使用GPL-v3.0协议开源",
                                 "作者:  李茂福（Cof-Lee）",
-                                "更新时间: 2024-11-17"]
+                                "更新时间: 2024-11-18"]
         self.padx = 2
         self.pady = 2
         self.view_width = 20
@@ -1046,76 +1044,48 @@ class PingDetectItemInfo:
                 self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, "<<Stopped>>")
                 return
             start_time = time.time()
-            try:
-                result = pythonping.ping(self.target_ip, count=1, timeout=self.detect_timeout, interval=0, size=self.detect_pkg_size)
-
-                rtt_time_ms_list.append(result.rtt_max_ms)
-                current_result_statistics_str = [f"rtt_min_ms: {min(rtt_time_ms_list):9.4f}",
-                                                 f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
-                                                 f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
-                                                 f"lost/total: {lost_sum}/{self.detect_count}"]
-                current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                if self.main_window.is_quit:
-                    return
+            ping = cofping.PingOnePackage(target_ip=self.target_ip, timeout=self.detect_timeout, size=self.detect_pkg_size)
+            ping.start()  # 阻塞型
+            current_time = time.strftime("%H:%M:%S", time.localtime())
+            rtt_time_ms_list.append(ping.result.rtt_ms)
+            if self.main_window.is_quit:
+                return
+            else:
+                if ping.result.is_success:
+                    result_info_list = [f"{i + 1} ",
+                                        f"from {ping.result.respond_source_ip}",
+                                        f"ttl={ping.result.ttl}",
+                                        f"size={ping.result.icmp_data_size}",
+                                        f"rtt_ms={ping.result.rtt_ms:.4f} ",
+                                        f"{current_time}\n",
+                                        ]
+                    last_pkg_status_ok = True
+                    self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, " ".join(result_info_list))
                 else:
-                    if result.success():
-                        result_info_line = f"{i + 1}  rtt_ms={result.rtt_max_ms} success  {current_time}\n"
-                        last_pkg_status_ok = True
-                        self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line)
-                    else:
-                        result_info_line = f"{i + 1}  rtt_ms={result.rtt_max_ms} timeout  {current_time}\n"
-                        lost_sum += 1
-                        last_pkg_status_ok = False
-                        self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line, "tag_config_red_fg")
-                    self.frame_detect_info_widget_dict["result_text"].see(tkinter.END)
-                    self.frame_detect_info_widget_dict["label_current_result_statistics"].__setitem__('text', "\n".join(
-                        current_result_statistics_str))
-                    self.frame_detect_info_widget_dict["status_canvas"].delete(
-                        *self.frame_detect_info_widget_dict["status_canvas"].find_all())
-                    if last_pkg_status_ok:
-                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
-                                                                                        fill="green",
-                                                                                        width=0, outline="green")
-                    else:
-                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
-                                                                                        fill="red",
-                                                                                        width=0, outline="red")
-                    using_time = time.time() - start_time
-                    if self.detect_interval > using_time:
-                        wait_time = self.detect_interval - using_time
-                    else:
-                        wait_time = 0
-                    time.sleep(wait_time)
-            except OSError as err:
-                current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                lost_sum += 1
-                rtt_time_ms_list.append(self.detect_timeout * 1000)
-                last_pkg_status_ok = False
-                current_result_statistics_str = [f"rtt_min_ms: {min(rtt_time_ms_list):9.4f}",
-                                                 f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
-                                                 f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
-                                                 f"lost/total: {lost_sum}/{self.detect_count}"]
-                result_info_line = f"{i + 1}  {err.__str__()}  {current_time}\n"
-                if self.main_window.is_quit:
-                    return
-                else:
+                    result_info_line = f"{i + 1}  rtt_ms={ping.result.rtt_ms:.4f} {ping.result.failed_info}  {current_time}\n"
+                    lost_sum += 1
+                    last_pkg_status_ok = False
                     self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, result_info_line, "tag_config_red_fg")
-                    self.frame_detect_info_widget_dict["result_text"].see(tkinter.END)
-                    self.frame_detect_info_widget_dict["label_current_result_statistics"].__setitem__('text', "\n".join(
-                        current_result_statistics_str))
-                    if last_pkg_status_ok:
-                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
-                                                                                        fill="green",
-                                                                                        width=0, outline="green")
-                    else:
-                        self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
-                                                                                        fill="red",
-                                                                                        width=0, outline="red")
-                    using_time = time.time() - start_time
-                    if self.detect_interval > using_time:
-                        wait_time = self.detect_interval - using_time
-                    else:
-                        wait_time = 0
+                self.frame_detect_info_widget_dict["result_text"].see(tkinter.END)
+                current_result_statistics_str = [f"rtt_min_ms: {min(rtt_time_ms_list):9.4f}",
+                                                 f"rtt_avg_ms: {sum(rtt_time_ms_list) / (i + 1):9.4f}",
+                                                 f"rtt_max_ms: {max(rtt_time_ms_list):9.4f}",
+                                                 f"lost/total: {lost_sum}/{self.detect_count}"]
+                self.frame_detect_info_widget_dict["label_current_result_statistics"].__setitem__('text', "\n".join(
+                    current_result_statistics_str))
+                self.frame_detect_info_widget_dict["status_canvas"].delete(
+                    *self.frame_detect_info_widget_dict["status_canvas"].find_all())
+                if last_pkg_status_ok:
+                    self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
+                                                                                    fill="green",
+                                                                                    width=0, outline="green")
+                else:
+                    self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
+                                                                                    fill="red",
+                                                                                    width=0, outline="red")
+                using_time = time.time() - start_time
+                if self.detect_interval > using_time:
+                    wait_time = self.detect_interval - using_time
                     time.sleep(wait_time)
         self.frame_detect_info_widget_dict["result_text"].insert(tkinter.END, "<<Finished>>")
 
