@@ -3,7 +3,7 @@
 # module name: cofping
 # author: Cof-Lee <cof8007@gmail.com>
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-11-18
+# update: 2024-11-19
 
 import array
 import ctypes
@@ -12,9 +12,12 @@ import time
 import socket
 import random
 import string
+import cofnet
 
-ICMP_ECHO_REQUEST_TYPE_ID = 0x08
-ICMP_ECHO_RESPOND_TYPE_ID = 0x00
+ICMP_TYPE_8_ECHO_REQUEST = 0x08
+ICMP_TYPE_0_ECHO_RESPOND = 0x00
+ICMP_TYPE_3_DESTINATION_UNREACHABLE = 3
+ICMP_TYPE_11_TIME_TO_LIVE_EXCEEDED = 11
 
 
 def stop_thread_silently(thread):
@@ -39,7 +42,7 @@ def stop_thread_silently(thread):
         print("cofping.stop_thread_silently: PyThreadState_SetAsyncExc failed")
 
 
-class ResultOfPingOnePackage:
+class ResultOfPingOnePacket:
     def __init__(self, respond_source_ip="", respond_destination_ip=0, rtt_ms=0.0, icmp_data_size=0, ttl=0, is_success=False,
                  icmp_type=0, icmp_code=0, icmp_checksum=0x0000, icmp_id=0x0000, icmp_sequence=0x0000, icmp_data=b'',
                  received_a_respond=False, failed_info=""):
@@ -59,7 +62,7 @@ class ResultOfPingOnePackage:
         self.failed_info = failed_info  # 如果检测不成功，必须提示失败信息
 
 
-class PingOnePackage:
+class PingOnePacket:
     """
     单次ping检测，只会发送1个icmp_echo_request报文，然后等待回复
     """
@@ -70,9 +73,9 @@ class PingOnePackage:
         self.size = size  # 发包数据大小，单位：字节，当整个报文长度小于mac帧长度要求时，会自动以0填充
         self.ttl = ttl
         self.dont_frag = dont_frag  # 置True时不分片，置False时分片
-        self.result = ResultOfPingOnePackage()
+        self.result = ResultOfPingOnePacket()
         self.is_finished = False
-        self.icmp_send_type = ICMP_ECHO_REQUEST_TYPE_ID  # icmp_echo_request
+        self.icmp_send_type = ICMP_TYPE_8_ECHO_REQUEST  # icmp_echo_request
         self.icmp_send_code = 0x00
         self.icmp_send_checksum = 0x0000
         self.icmp_send_id = 0xFFFF & random.randint(0, 0xFFFF)  # 为进程号，echo响应消息与echo请求消息中的id保持一致，取值随机
@@ -131,16 +134,17 @@ class PingOnePackage:
             print(f"{self.target_ip} 开始接收回包，")
             used_time = time.time() - self.start_time
             if used_time >= self.timeout:
-                print(f"PingOnePackage.recv_icmp_packet: {self.target_ip}接收超时了 {used_time}")
+                print(f"PingOnePacket.recv_icmp_packet: {self.target_ip}接收超时了 {used_time}")
                 self.result.is_success = False
                 self.result.failed_info = "timeout"
                 self.result.rtt_ms = self.timeout * 1000
                 self.is_finished = True
                 return
             try:
-                recv_packet, addr = self.icmp_socket.recvfrom(65535)  # 接收到整个ip报文，阻塞型函数
+                # recv_packet, addr = self.icmp_socket.recvfrom(65535)  # ★★接收到整个ip报文，阻塞型函数
+                recv_packet = self.icmp_socket.recv(65535)  # ★★接收到整个ip报文，阻塞型函数
             except Exception as e:  # 超时会报异常
-                print("\nPingOnePackage.recv_icmp_packet: 接收报异常超时了", e)
+                print("\nPingOnePacket.recv_icmp_packet: 接收报异常超时了", e)
                 self.result.is_success = False
                 self.result.failed_info = "timeout"
                 self.result.rtt_ms = self.timeout * 1000
@@ -151,18 +155,19 @@ class PingOnePackage:
             ipv4_header = recv_packet[:20]
             icmp_header = recv_packet[20:28]
             icmp_data = recv_packet[28:]
+            ipv4_struct_tuple = struct.unpack("!BBHHHBBHII", ipv4_header)
             icmp_type, icmp_code, icmp_checksum, icmp_id, icmp_sequence = struct.unpack("bbHHH", icmp_header)
-            if icmp_id == self.icmp_send_id and icmp_sequence == self.icmp_send_sequence and icmp_type != ICMP_ECHO_REQUEST_TYPE_ID:
+            if icmp_id == self.icmp_send_id and icmp_sequence == self.icmp_send_sequence and icmp_type != ICMP_TYPE_8_ECHO_REQUEST:
                 self.result.received_a_respond = True
                 self.result.rtt_ms = rtt_s * 1000
-                ipv4_struct_tuple = struct.unpack("!BBHHHBBHII", ipv4_header)
-                if icmp_type == ICMP_ECHO_RESPOND_TYPE_ID and icmp_code == 0x00:
+                if icmp_type == ICMP_TYPE_0_ECHO_RESPOND and icmp_code == 0x00:
                     self.result.is_success = True
                 else:
                     self.result.is_success = False
                     self.result.failed_info = self.generate_icmp_failed_info(icmp_type, icmp_code)
                 self.result.ttl = ipv4_struct_tuple[5]
-                self.result.respond_source_ip = addr[0]
+                # self.result.respond_source_ip = addr[0]  # 同 ipv4_struct_tuple[8]
+                self.result.respond_source_ip = cofnet.int32_to_ip(ipv4_struct_tuple[8])
                 self.result.respond_destination_ip_int32 = ipv4_struct_tuple[9]
                 self.result.icmp_data_size = len(icmp_data)  # 大小为icmp数据部分的长度
                 self.result.icmp_type = icmp_type
@@ -173,13 +178,38 @@ class PingOnePackage:
                 self.result.icmp_data = icmp_data
                 self.is_finished = True
                 return
+            elif icmp_type == ICMP_TYPE_11_TIME_TO_LIVE_EXCEEDED:  # 这种类型常见于tracepath中，由中间路由器返回的ttl超时消息
+                # 它本身是icmp报文，其icmp_id和icmp_sequence为空，其数据内容为 原数据包的ip报文（含ip报文中的icmp载荷）
+                carrier_ipv4_header = recv_packet[28:48]
+                carrier_icmp_packet = recv_packet[48:]
+                # carrier_icmp_header = recv_packet[48:56]
+                # carrier_icmp_data = recv_packet[56:]
+                carrier_ipv4_struct_tuple = struct.unpack("!BBHHHBBHII", carrier_ipv4_header)
+                if carrier_ipv4_struct_tuple[9] == cofnet.ip_or_maskbyte_to_int(
+                        self.target_ip) and carrier_icmp_packet == self.icmp_send_packet:
+                    self.result.received_a_respond = True
+                    self.result.rtt_ms = rtt_s * 1000
+                    self.result.is_success = False
+                    self.result.failed_info = self.generate_icmp_failed_info(icmp_type, icmp_code)
+                    self.result.ttl = ipv4_struct_tuple[5]
+                    self.result.respond_source_ip = cofnet.int32_to_ip(ipv4_struct_tuple[8])
+                    self.result.respond_destination_ip_int32 = ipv4_struct_tuple[9]
+                    self.result.icmp_data_size = len(icmp_data)  # 大小为icmp数据部分的长度
+                    self.result.icmp_type = icmp_type
+                    self.result.icmp_code = icmp_code
+                    self.result.icmp_checkum = icmp_checksum
+                    self.result.icmp_id = icmp_id
+                    self.result.icmp_sequence = icmp_sequence
+                    self.result.icmp_data = icmp_data
+                    self.is_finished = True
+                    return
             time_left = self.timeout - rtt_s
             if time_left > 0:
                 self.icmp_socket.settimeout(time_left)
 
     @staticmethod
     def generate_icmp_failed_info(icmp_type, icmp_code) -> str:
-        if icmp_type == 3:  # ★终点不可达
+        if icmp_type == ICMP_TYPE_3_DESTINATION_UNREACHABLE:  # ★终点不可达
             if icmp_code == 0:
                 failed_info = f"终点不可达-->network_unreachable icmp_type={icmp_type} icmp_code={icmp_code}"
             elif icmp_code == 1:
@@ -227,9 +257,9 @@ class PingOnePackage:
                 failed_info = f"路由重定向-->for_tos_and_host  icmp_type={icmp_type} icmp_code={icmp_code}"
             else:
                 failed_info = f"路由重定向-->UNKNOWN_CODE  icmp_type={icmp_type} icmp_code={icmp_code}"
-        elif icmp_type == 11:  # ★时间超时
+        elif icmp_type == ICMP_TYPE_11_TIME_TO_LIVE_EXCEEDED:  # ★时间超时
             if icmp_code == 0:
-                failed_info = f"时间超时--ttl_超时_ttl为0了  icmp_type={icmp_type} icmp_code={icmp_code}"
+                failed_info = f"时间超时--ttl_超时_传输过程中减为0了  icmp_type={icmp_type} icmp_code={icmp_code}"
             elif icmp_code == 1:
                 failed_info = f"时间超时--分片重组超时  icmp_type={icmp_type} icmp_code={icmp_code}"
             else:
@@ -248,7 +278,7 @@ class PingOnePackage:
         return failed_info
 
 
-class PingIPv6OnePackage:
+class PingIPv6OnePacket:
     def __init__(self):
         pass
 
@@ -256,3 +286,8 @@ class PingIPv6OnePackage:
 class TcpPing:
     def __init__(self):
         pass
+
+
+# #################################  end of module  ##############################
+if __name__ == '__main__':
+    print("Hello, this is cofping.py")
