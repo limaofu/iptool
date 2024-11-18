@@ -3,12 +3,12 @@
 # module name: iptool
 # author: Cof-Lee <cof8007@gmail.com>
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-11-18
+# update: 2024-11-19
 
 """
 pyinstaller打包为.exe程序:
 cmd>  cd  项目名称/venv/Scripts
-cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v241118.exe
+cmd>  pyinstaller.exe ../../iptool.py -F -w -n iptool-v241119.exe
 """
 
 import time
@@ -50,10 +50,10 @@ def stop_thread_silently(thread):
 class MainWindow:
     def __init__(self, width=800, height=480, title=''):
         self.about_info_list = ["ipTool，开源的ip计算工具",
-                                "版本:  v241118",
+                                "版本:  v241119",
                                 "本软件使用GPL-v3.0协议开源",
                                 "作者:  李茂福（Cof-Lee）",
-                                "更新时间: 2024-11-18",
+                                "更新时间: 2024-11-19",
                                 "开源地址: https://github.com/limaofu/iptool"]
         self.title = title  # 主程序标题
         self.width = width  # 主程序界面宽度（单位：像素）
@@ -1122,8 +1122,8 @@ class PingDetectItemInfo:
                 return
             start_time = time.time()
             # 创建ping对象（icmp_v4）
-            ping = cofping.PingOnePackage(target_ip=self.target_ip, timeout=self.detect_timeout, size=self.detect_pkg_size,
-                                          ttl=self.detect_ip_ttl, dont_frag=self.dont_frag)
+            ping = cofping.PingOnePacket(target_ip=self.target_ip, timeout=self.detect_timeout, size=self.detect_pkg_size,
+                                         ttl=self.detect_ip_ttl, dont_frag=self.dont_frag)
             ping.start()  # 阻塞型
             current_time = time.strftime("%H:%M:%S", time.localtime())
             rtt_time_ms_list.append(ping.result.rtt_ms)
