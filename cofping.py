@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 # coding=utf-8
 # module name: cofping
 # author: Cof-Lee <cof8007@gmail.com>
@@ -42,8 +41,8 @@ def stop_thread_silently(thread):
 
 class ResultOfPingOnePackage:
     def __init__(self, respond_source_ip="", respond_destination_ip=0, rtt_ms=0.0, icmp_data_size=0, ttl=0, is_success=False,
-                 icmp_type=0, icmp_code=0, icmp_checksum=0x0000, icmp_id=0x0000, icmp_sequence=0x0000,
-                 icmp_data=b'', failed_info=""):
+                 icmp_type=0, icmp_code=0, icmp_checksum=0x0000, icmp_id=0x0000, icmp_sequence=0x0000, icmp_data=b'',
+                 received_a_respond=False, failed_info=""):
         self.respond_source_ip = respond_source_ip
         self.respond_destination_ip_int32 = respond_destination_ip
         self.rtt_ms = rtt_ms  # RTT时间，单位：毫秒
@@ -56,6 +55,7 @@ class ResultOfPingOnePackage:
         self.icmp_id = icmp_id
         self.icmp_sequence = icmp_sequence
         self.icmp_data = icmp_data  # bytes类型数据
+        self.received_a_respond = received_a_respond
         self.failed_info = failed_info  # 如果检测不成功，必须提示失败信息
 
 
@@ -64,11 +64,12 @@ class PingOnePackage:
     单次ping检测，只会发送1个icmp_echo_request报文，然后等待回复
     """
 
-    def __init__(self, target_ip="", timeout=2, size=1, df=False):
+    def __init__(self, target_ip="", timeout=2, size=1, ttl=128, dont_frag=False):
         self.target_ip = target_ip  # 目标ip（ipv4地址）
         self.timeout = timeout  # 超时，单位：秒
         self.size = size  # 发包数据大小，单位：字节，当整个报文长度小于mac帧长度要求时，会自动以0填充
-        self.df = df  # 置True时不分片，置False时分片
+        self.ttl = ttl
+        self.dont_frag = dont_frag  # 置True时不分片，置False时分片
         self.result = ResultOfPingOnePackage()
         self.is_finished = False
         self.icmp_send_type = ICMP_ECHO_REQUEST_TYPE_ID  # icmp_echo_request
@@ -85,18 +86,21 @@ class PingOnePackage:
     def start(self):
         self.icmp_send_packet = self.generate_icmp_packet()
         # 创建icmp套接字
-        self.icmp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname("icmp"))
-        self.icmp_socket.settimeout(self.timeout)
+        self.icmp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        self.icmp_socket.settimeout(self.timeout)  # 设置socket超时时间，当收到数据包后，会重置超时时间为指定的
+        self.icmp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, self.ttl)  # 设置ip报文的ttl
+        if self.dont_frag:
+            self.icmp_socket.setsockopt(socket.IPPROTO_IP, socket.IPV6_DONTFRAG, 2)  # 设置ip报文不分片，没有IPV4_DONTFRAG常量，这就有点坑
         self.start_time = time.time()
         try:
-            self.icmp_socket.sendto(self.icmp_send_packet, (self.target_ip, 0))  # 每次发送完报文后，此icmp_socket就变了
+            self.icmp_socket.sendto(self.icmp_send_packet, (self.target_ip, 0))  # ★发送请求报文
         except OSError as err:
             self.is_finished = True
             stop_thread_silently(self.recv_thread)
             self.result.is_success = False
             self.result.failed_info = err.__str__()
             return
-        self.recv_icmp_packet()  # 阻塞型
+        self.recv_icmp_packet()  # 接收报文，阻塞型
         self.icmp_socket.close()
 
     @staticmethod
@@ -149,6 +153,7 @@ class PingOnePackage:
             icmp_data = recv_packet[28:]
             icmp_type, icmp_code, icmp_checksum, icmp_id, icmp_sequence = struct.unpack("bbHHH", icmp_header)
             if icmp_id == self.icmp_send_id and icmp_sequence == self.icmp_send_sequence and icmp_type != ICMP_ECHO_REQUEST_TYPE_ID:
+                self.result.received_a_respond = True
                 self.result.rtt_ms = rtt_s * 1000
                 ipv4_struct_tuple = struct.unpack("!BBHHHBBHII", ipv4_header)
                 if icmp_type == ICMP_ECHO_RESPOND_TYPE_ID and icmp_code == 0x00:
@@ -156,7 +161,6 @@ class PingOnePackage:
                 else:
                     self.result.is_success = False
                     self.result.failed_info = self.generate_icmp_failed_info(icmp_type, icmp_code)
-
                 self.result.ttl = ipv4_struct_tuple[5]
                 self.result.respond_source_ip = addr[0]
                 self.result.respond_destination_ip_int32 = ipv4_struct_tuple[9]
@@ -175,10 +179,76 @@ class PingOnePackage:
 
     @staticmethod
     def generate_icmp_failed_info(icmp_type, icmp_code) -> str:
-        return "failed type_code: " + icmp_type + " " + icmp_code
+        if icmp_type == 3:  # ★终点不可达
+            if icmp_code == 0:
+                failed_info = f"终点不可达-->network_unreachable icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 1:
+                failed_info = f"终点不可达-->host_unreachable icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 2:
+                failed_info = f"终点不可达-->protocol_unreachable icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 3:
+                failed_info = f"终点不可达-->port_unreachable icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 4:
+                failed_info = f"终点不可达-->fragmentation_required icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 5:
+                failed_info = f"终点不可达-->source_route_failed icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 6:
+                failed_info = f"终点不可达-->network_unknown icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 7:
+                failed_info = f"终点不可达-->host_unknown icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 8:
+                failed_info = f"终点不可达-->source_host_isolated icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 9:
+                failed_info = f"终点不可达-->network_administratively_prohibited icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 10:
+                failed_info = f"终点不可达-->host_administratively_prohibited icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 11:
+                failed_info = f"终点不可达-->network_unreachable_tos icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 12:
+                failed_info = f"终点不可达-->host_unreachable_tos icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 13:
+                failed_info = f"终点不可达-->communication_administratively_prohibited icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 14:
+                failed_info = f"终点不可达-->host_precedence_violation icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 13:
+                failed_info = f"终点不可达-->precedence_cutoff icmp_type={icmp_type} icmp_code={icmp_code}"
+            else:
+                failed_info = f"终点不可达-->UNKNOWN_CODE icmp_type={icmp_type} icmp_code={icmp_code}"
+        elif icmp_type == 4:  # ★源点不可达
+            failed_info = f"源点不可达  icmp_type={icmp_type} icmp_code={icmp_code}"
+        elif icmp_type == 5:  # ★路由重定向
+            if icmp_code == 0:
+                failed_info = f"路由重定向-->for_network  icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 1:
+                failed_info = f"路由重定向-->for_host  icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 2:
+                failed_info = f"路由重定向-->for_tos_and_network  icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 3:
+                failed_info = f"路由重定向-->for_tos_and_host  icmp_type={icmp_type} icmp_code={icmp_code}"
+            else:
+                failed_info = f"路由重定向-->UNKNOWN_CODE  icmp_type={icmp_type} icmp_code={icmp_code}"
+        elif icmp_type == 11:  # ★时间超时
+            if icmp_code == 0:
+                failed_info = f"时间超时--ttl_超时_ttl为0了  icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 1:
+                failed_info = f"时间超时--分片重组超时  icmp_type={icmp_type} icmp_code={icmp_code}"
+            else:
+                failed_info = f"时间超时--UNKNOWN_CODE  icmp_type={icmp_type} icmp_code={icmp_code}"
+        elif icmp_type == 12:  # ★IP头参数问题
+            if icmp_code == 0:
+                failed_info = f"IP头参数问题-->pointer_indicates_error  icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 1:
+                failed_info = f"IP头参数问题-->missing_required_option  icmp_type={icmp_type} icmp_code={icmp_code}"
+            elif icmp_code == 2:
+                failed_info = f"IP头参数问题-->bad_length  icmp_type={icmp_type} icmp_code={icmp_code}"
+            else:
+                failed_info = f"IP头参数问题-->UNKNOWN_CODE  icmp_type={icmp_type} icmp_code={icmp_code}"
+        else:  # ★未知错误类型
+            failed_info = f"未知错误类型  icmp_type={icmp_type} icmp_code={icmp_code}"
+        return failed_info
 
 
-class Ping6:
+class PingIPv6OnePackage:
     def __init__(self):
         pass
 
