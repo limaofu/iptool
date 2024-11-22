@@ -3,7 +3,7 @@
 # module name: iptool
 # author: Cof-Lee <cof8007@gmail.com>
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-11-19
+# update: 2024-11-20
 
 """
 pyinstaller打包为.exe程序:
@@ -1170,6 +1170,8 @@ class PingDetectItemInfo:
                 else:
                     self.frame_detect_info_widget_dict["status_canvas"].create_oval(0, 0, self.height // 2, self.height // 2,
                                                                                     fill="red", width=0, outline="red")
+                if i == self.detect_count - 1:
+                    break
                 using_time = time.time() - start_time
                 if self.detect_interval > using_time:
                     wait_time = self.detect_interval - using_time
