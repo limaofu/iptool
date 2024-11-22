@@ -3,7 +3,7 @@
 # module name: cofping
 # author: Cof-Lee <cof8007@gmail.com>
 # this module uses the GPL-3.0 open source protocol
-# update: 2024-11-19
+# update: 2024-11-20
 
 import array
 import ctypes
@@ -43,11 +43,11 @@ def stop_thread_silently(thread):
 
 
 class ResultOfPingOnePacket:
-    def __init__(self, respond_source_ip="", respond_destination_ip=0, rtt_ms=0.0, icmp_data_size=0, ttl=0, is_success=False,
+    def __init__(self, respond_source_ip="", respond_destination_ip="", rtt_ms=0.0, icmp_data_size=0, ttl=0, is_success=False,
                  icmp_type=0, icmp_code=0, icmp_checksum=0x0000, icmp_id=0x0000, icmp_sequence=0x0000, icmp_data=b'',
                  received_a_respond=False, failed_info=""):
         self.respond_source_ip = respond_source_ip
-        self.respond_destination_ip_int32 = respond_destination_ip
+        self.respond_destination_ip = respond_destination_ip
         self.rtt_ms = rtt_ms  # RTT时间，单位：毫秒
         self.icmp_data_size = icmp_data_size  # icmp数据大小，单位：字节
         self.ttl = ttl  # ip报文里的ttl
@@ -168,7 +168,7 @@ class PingOnePacket:
                 self.result.ttl = ipv4_struct_tuple[5]
                 # self.result.respond_source_ip = addr[0]  # 同 ipv4_struct_tuple[8]
                 self.result.respond_source_ip = cofnet.int32_to_ip(ipv4_struct_tuple[8])
-                self.result.respond_destination_ip_int32 = ipv4_struct_tuple[9]
+                self.result.respond_destination_ip = cofnet.int32_to_ip(ipv4_struct_tuple[9])
                 self.result.icmp_data_size = len(icmp_data)  # 大小为icmp数据部分的长度
                 self.result.icmp_type = icmp_type
                 self.result.icmp_code = icmp_code
@@ -193,7 +193,7 @@ class PingOnePacket:
                     self.result.failed_info = self.generate_icmp_failed_info(icmp_type, icmp_code)
                     self.result.ttl = ipv4_struct_tuple[5]
                     self.result.respond_source_ip = cofnet.int32_to_ip(ipv4_struct_tuple[8])
-                    self.result.respond_destination_ip_int32 = ipv4_struct_tuple[9]
+                    self.result.respond_destination_ip = cofnet.int32_to_ip(ipv4_struct_tuple[9])
                     self.result.icmp_data_size = len(icmp_data)  # 大小为icmp数据部分的长度
                     self.result.icmp_type = icmp_type
                     self.result.icmp_code = icmp_code
