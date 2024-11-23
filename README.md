@@ -6,4 +6,5 @@ python3 iptool.py
 ```
 效果图：<br>
 ![demo1](not_resource_img/ipv4_demo_v241110.png)<br>
-![demo1](not_resource_img/ipv6_demo1.png)
+![demo1](not_resource_img/ipv6_demo1.png)<br>
+![demo1](not_resource_img/ping_demo1.png)
